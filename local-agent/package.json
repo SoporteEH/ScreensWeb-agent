@@ -1,0 +1,45 @@
+{
+  "name": "local-agent",
+  "version": "1.0.5",
+  "description": "Luckia Screens Local Agent",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "electron-builder"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "electron-log": "^5.1.5",
+    "electron-squirrel-startup": "^1.0.1",
+    "node-machine-id": "^1.1.12",
+    "socket.io-client": "^4.8.1",
+    "node-fetch": "^2.6.7",
+    "jwt-decode": "^4.0.0",
+    "electron-updater": "^6.1.1"
+  },
+  "devDependencies": {
+    "electron": "^38.2.1",
+    "electron-builder": "^24.6.4"
+  },
+  "build": {
+    "appId": "com.luckia.screens.agent",
+    "productName": "Luckia Screens Agent",
+    "icon": "build/icon.png",
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "SoporteEH",
+      "repo": "ScreensWeb"
+    },
+    "asarUnpack": [
+      "**/node_modules/electron-updater/**/*",
+      "**/node_modules/electron-log/**/*"
+    ]
+  }
+}
