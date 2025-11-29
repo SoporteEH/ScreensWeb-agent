@@ -1,7 +1,7 @@
 {
   "name": "local-agent",
   "version": "1.0.5",
-  "description": "Luckia Screens Local Agent",
+  "description": "ScreensWeb Local Agent",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -25,8 +25,8 @@
     "electron-builder": "^24.6.4"
   },
   "build": {
-    "appId": "com.luckia.screens.agent",
-    "productName": "Luckia Screens Agent",
+    "appId": "com.screens.web.agent",
+    "productName": "ScreensWeb Agent",
     "icon": "build/icon.png",
     "win": {
       "target": "nsis",
@@ -35,7 +35,7 @@
     "publish": {
       "provider": "github",
       "owner": "SoporteEH",
-      "repo": "ScreensWeb"
+      "repo": "ScreensWeb-agent"
     },
     "asarUnpack": [
       "**/node_modules/electron-updater/**/*",

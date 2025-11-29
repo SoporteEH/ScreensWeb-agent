@@ -1,6 +1,6 @@
 name: Release Local Agent
 
-# Disparador: Se activa cuando se crea y se sube un tag con el formato v*.*.*
+# Disparador - Se activa cuando se crea un tag con el formato
 on:
   push:
     tags:
@@ -8,24 +8,23 @@ on:
 
 jobs:
   build-and-release:
-    # La máquina que usará GitHub para construir la app (Windows para .exe)
     runs-on: windows-latest
 
     permissions:
       contents: write
 
     steps:
-      # 1. Descargar el código del repositorio correspondiente al tag
+      # Descarga el código del repositorio al tag
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. Configurar el entorno de Node.js
+      # Configura el entorno de Node
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      # 3. Cachear las dependencias de npm (Opcional, pero recomendado para velocidad)
+      # Cachea dependencias npm + velocidad
       - name: Cache npm dependencies
         uses: actions/cache@v4
         with:
@@ -34,20 +33,19 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-
 
-      # 4. Instalar las dependencias del agente
-      # Usamos 'npm install' en lugar de 'npm ci' para mayor robustez
+      # Instala dependencias del agente
       - name: Install dependencies
-        run: npm install # <-- ¡CAMBIO REALIZADO AQUÍ!
+        run: npm install
         working-directory: ./local-agent
 
-      # 5. Compilar la aplicación para crear el .exe
+      # Compilar aplicación y crea el .exe
       - name: Build application
         run: npm run build
         working-directory: ./local-agent
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 6. Crear la Release en GitHub
+      # Crea Release en GitHub
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
