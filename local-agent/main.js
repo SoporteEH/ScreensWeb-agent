@@ -30,9 +30,7 @@ if (require('electron-squirrel-startup')) {
     app.quit();
 }
 
-// =================================================================
 // CONSTANTES Y CONFIGURACIÓN
-// =================================================================
 
 // URL del servidor central se sobrescribe con la variable de entorno en producción.
 const SERVER_URL = process.env.SERVER_URL || 'http://192.168.1.134:3000';
@@ -48,9 +46,7 @@ const SYNC_API_URL = `${SERVER_URL}/api/users/me/local-assets`;
 console.log(`[CONFIG]: Usando servidor: ${SERVER_URL}`);
 console.log(`[CONFIG]: Directorio de contenido local: ${CONTENT_DIR}`)
 
-// =================================================================
 // VARIABLES GLOBALES
-// =================================================================
 
 let deviceId;           // ID único de la máquina.
 let agentToken;         // JWT de autenticación para el agente.
@@ -63,9 +59,7 @@ let isOnline = false; // Bandera para indicar si la maquina esta conectada a int
 const managedWindows = new Map(); // Mapa para gestionar las ventanas de contenido abiertas
 const retryManager = new Map(); // Mapa para gestionar los reintentos
 
-// =================================================================
 // FUNCIONES DE UTILIDAD (CONFIGURACIÓN Y AUTENTICACIÓN)
-// =================================================================
 
 /**
  * Carga la configuración del agente desde un archivo JSON.
@@ -162,9 +156,7 @@ function startTokenRefreshLoop() {
     }, 4 * 60 * 60 * 1000); // 4 horas
 }
 
-// =================================================================
 // LÓGICA DEL ACTUALIZADOR AUTOMÁTICO
-// =================================================================
 
 /**
  * Configura los listeners de electron-updater y busca actualizaciones.
@@ -182,9 +174,7 @@ const checkForUpdates = () => {
     autoUpdater.checkForUpdates();
 };
 
-// =================================================================
 // MODO VINCULACIÓN (PROVISIONING)
-// =================================================================
 
 /**
  * Inicia el agente en modo vinculación cuando no hay configuración previa.
@@ -238,9 +228,7 @@ function startProvisioningMode() {
     });
 }
 
-// =================================================================
 // MODO NORMAL (OPERACIÓN PRINCIPAL)
-// =================================================================
 
 function startNormalMode() {
     const config = loadConfig();
@@ -257,10 +245,10 @@ function startNormalMode() {
     screen.on('display-added', (event, newDisplay) => {
         console.log(`[DISPLAY]: Nueva pantalla detectada: ID ${newDisplay.id}`);
         if (socket?.connected) {
-            // 1. Notifica al servidor sobre la nueva configuración de pantallas.
+            // Notifica al servidor sobre la nueva configuración de pantallas.
             registerDevice(); 
 
-            // 2. Intenta restaurar el estado de la pantalla recién conectada desde la memoria local.
+            // Intenta restaurar el estado de la pantalla recién conectada desde la memoria local.
             const lastState = loadLastState();
             const stableKey = getStableScreenKey(newDisplay);
             if (lastState[stableKey]) {
@@ -408,9 +396,9 @@ function registerDevice() {
     socket.emit('registerDevice', { deviceId, screens: screenInfo });
 }
 
-// =================================================================
+
 // MANEJO DE ESTADO Y COMANDOS
-// =================================================================
+
 
 /**
  * Genera una clave única y estable para una pantalla basada en su posición.
@@ -612,20 +600,19 @@ function createContentWindow(display, urlToLoad, command) {
 }
 
 /**
- * Maneja el comando 'show_url' de forma resiliente.
- * @param {object} command - El objeto del comando con { screenIndex, url, commandId? }.
+ * Maneja el comando 'show_url'
  */
 function handleShowUrl(command) {
-    const { screenIndex, url } = command;
+    const { screenIndex, url, credentials } = command;
 
-    // 1. Cancelar cualquier reintento pendiente para esta pantalla
+    // Cancela cualquier reintento pendiente para esta pantalla
     if (retryManager.has(screenIndex)) {
         console.log(`[RETRY]: Cancelando reintento pendiente para la pantalla ${screenIndex} debido a un nuevo comando.`);
         clearTimeout(retryManager.get(screenIndex).timerId);
         retryManager.delete(screenIndex);
     }
 
-    // 2. Validar que la pantalla existe
+    // Valida que la pantalla existe
     const targetDisplay = screen.getAllDisplays().find(d => d.id === screenIndex);
     if (!targetDisplay) {
         const errorMsg = `Error: Pantalla con índice ${screenIndex} no encontrada.`;
@@ -634,11 +621,11 @@ function handleShowUrl(command) {
         return;
     }
 
-    // 3. GUARDAR EL ESTADO DESEADO INMEDIATAMENTE
+    // GUARDA EL ESTADO DESEADO INMEDIATAMENTE
     // Si la carga posterior falla, el agente recordará esta URL para futuros reintentos.
     saveCurrentState(targetDisplay, url);
 
-    // 4. Comprobar conexión si la URL es web
+    // Comprobar conexión si la URL es web
     if (!isOnline && !url.startsWith('local:')) {
         const errorMsg = `Error: Sin conexion. No se puede cargar la URL '${url}'. Se reintentara cuando vuelva la conexion.`;
         console.error(`[RESILIENCE]: ${errorMsg}`);
@@ -647,7 +634,7 @@ function handleShowUrl(command) {
         return;
     }
 
-    // 5. Procesar la URL final (web o local)
+    // Procesar la URL final (web o local)
     let finalUrl = url;
     if (url.startsWith('local:')) {
         const filename = url.substring(6);
@@ -656,31 +643,91 @@ function handleShowUrl(command) {
             const errorMsg = `Error: Activo local no encontrado: ${filename}.`;
             console.error(`[COMMAND]: ${errorMsg}`);
             sendCommandFeedback(command, 'error', errorMsg);
-            // No programamos reintento para archivos locales, ya que es un error de sincronización, no de red.
             return;
         }
         finalUrl = `file://${filePath}`;
     }
 
-    // 6. Intentar mostrar el contenido en la ventana
+    // Intenta mostrar el contenido en la ventana
     try {
         let win = managedWindows.get(screenIndex);
 
-        if (win && !win.isDestroyed()) {
-            // Si la ventana ya existe, solo carga la nueva URL
-            win.loadURL(finalUrl);
-            win.focus();
-        } else {
-            // Si no existe, crea una nueva ventana con toda la lógica de resiliencia
-            win = createContentWindow(targetDisplay, finalUrl, command);
+        // Asegura que la ventana exista
+        if (!win || win.isDestroyed()) {
+            win = createContentWindow(targetDisplay, 'about:blank', command);
         }
 
-        // Si llegamos aquí, la carga se inició. Reportamos el estado al servidor.
+        // Limpia listeners antiguos para evitar duplicados
+        win.webContents.removeAllListeners('did-finish-load');
+
+        // Caso especial: Auto-login para Sportradar si hay credenciales
+        const shouldAutoLogin = url.startsWith('https://lcr.sportradar.com') && !!credentials;
+        if (shouldAutoLogin) {
+            console.log(`[AUTOLOGIN]: Detectado destino Sportradar y credenciales. Configurando auto-login...`);
+
+            const buildAutoLoginScript = (creds) => `
+                (() => {
+                    try {
+                        const usernameInput = document.querySelector('input[name="username"]') || document.querySelector('#username');
+                        const passwordInput = document.querySelector('input[name="password"]') || document.querySelector('#password');
+                        const loginButton = document.querySelector('button[type="submit"]') || document.querySelector('button[name="login"]');
+                        // Nota: Los selectores anteriores son ejemplos y pueden requerir ajuste a la página real.
+                        if (!usernameInput || !passwordInput || !loginButton) {
+                            return { success: false, reason: 'Campos de login no encontrados. Ajusta los selectores CSS a la página real.' };
+                        }
+                        usernameInput.focus();
+                        usernameInput.value = ${JSON.stringify(((creds && creds.username) ?? ''))};
+                        usernameInput.dispatchEvent(new Event('input', { bubbles: true }));
+                        passwordInput.focus();
+                        passwordInput.value = ${JSON.stringify(((creds && creds.password) ?? ''))};
+                        passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
+                        loginButton.click();
+                        return { success: true };
+                    } catch (e) {
+                        return { success: false, reason: 'Excepción al ejecutar script: ' + e.message };
+                    }
+                })();
+            `;
+
+            const onDidFinishLoad = () => {
+                try {
+                    // Auto-limpieza inmediata del listener
+                    win.webContents.removeListener('did-finish-load', onDidFinishLoad);
+                    const currentUrl = win.webContents.getURL();
+                    if (!currentUrl.startsWith('https://lcr.sportradar.com')) {
+                        return;
+                    }
+                    const script = buildAutoLoginScript(credentials);
+                    win.webContents.executeJavaScript(script)
+                        .then((result) => {
+                            if (result && result.success) {
+                                console.log('[AUTOLOGIN]: Script inyectado correctamente. Intento de login lanzado.');
+                            } else {
+                                console.warn('[AUTOLOGIN]: Selectores no encontrados o script falló:', result?.reason || 'razón desconocida');
+                            }
+                        })
+                        .catch(err => {
+                            console.error('[AUTOLOGIN]: Error al ejecutar script de auto-login:', err.message);
+                        });
+                } catch (err) {
+                    console.error('[AUTOLOGIN]: Error al preparar la inyección:', err.message);
+                    win.webContents.removeListener('did-finish-load', onDidFinishLoad);
+                }
+            };
+
+            // Adjunta el listener para esta navegación
+            win.webContents.on('did-finish-load', onDidFinishLoad);
+        }
+
+        // Carga y enfoca: común a todas las ramas
+        win.loadURL(finalUrl);
+        win.focus();
+
+        // Reporta el estado al servidor.
         if (socket && socket.connected) {
             socket.emit('reportScreenState', { deviceId, screenId: screenIndex, url });
         }
 
-        // Enviamos feedback de éxito solo para comandos iniciados por el usuario
         const successMsg = `Iniciando carga de '${url}' en la pantalla.`;
         sendCommandFeedback(command, 'success', successMsg);
 
@@ -750,7 +797,7 @@ async function syncLocalAssets() {
     console.log('[SYNC]: Iniciando proceso de sincronizacion de activos locales...');
 
     try {
-        // --- Obtener lista de activos del servidor ---
+        // --- Obtiene lista de activos del servidor ---
         console.log('[SYNC-DEBUG]: Pidiendo lista de activos desde el servidor...');
         const response = await fetch(SYNC_API_URL, {
             headers: { 'Authorization': `Bearer ${agentToken}` }
@@ -761,7 +808,6 @@ async function syncLocalAssets() {
         const serverAssets = await response.json();
         console.log(`[SYNC-DEBUG]: El servidor dice que debo tener ${serverAssets.length} archivos:`, serverAssets.map(a => a.originalFilename));
 
-        // Crear un mapa para búsquedas eficientes.
         const serverAssetMap = new Map(serverAssets.map(asset => [asset.serverFilename, asset]));
 
         // --- Lee archivos locales existentes
@@ -771,7 +817,7 @@ async function syncLocalAssets() {
         const localFiles = fs.readdirSync(CONTENT_DIR);
         console.log(`[SYNC-DEBUG]: Encontrados ${localFiles.length} archivos locales en disco.`);
 
-        // --- 3. Determinar qué archivos borrar ---
+        // --- Determina que archivos eliminr
         const filesToDelete = localFiles.filter(file => !serverAssetMap.has(file));
         if (filesToDelete.length > 0) {
             console.log('[SYNC-DEBUG]: Archivos a eliminar:', filesToDelete);
@@ -785,7 +831,7 @@ async function syncLocalAssets() {
             }
         }
 
-        // --- 4. Determinar qué archivos descargar ---
+        // --- Determina qué archivos descargar
         const filesToDownload = serverAssets.filter(asset => !localFiles.includes(asset.serverFilename));
         if (filesToDownload.length > 0) {
             console.log('[SYNC-DEBUG]: Archivos a descargar:', filesToDownload.map(a => a.originalFilename));
@@ -825,11 +871,11 @@ async function syncLocalAssets() {
     }
 }
 
-// =================================================================
-// PUNTO DE ENTRADA Y CICLO DE VIDA DE LA APLICACIÓN
-// =================================================================
 
-// Decide en qué modo iniciar el agente basado en si existe una configuración.
+// CICLO DE VIDA DE LA APP
+
+
+// Qué modo iniciar el agente basado en si existe una configuración.
 const initialConfig = loadConfig();
 if (!initialConfig.deviceId) {
     console.log('[INIT]: No se encontro configuracion. Iniciando modo vinculacion.');
