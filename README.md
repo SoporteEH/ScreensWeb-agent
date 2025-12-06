@@ -44,9 +44,9 @@ Sus funciones son:
 - 🔄 **Auto-actualización**: integración con CI/CD (tags + GitHub Actions + electron-updater).
 - 📡 **Conexión en tiempo real**: WebSockets con reconexión automática.
 - 🧱 **Modo kiosko**: pantalla completa, sin barras ni menús.
-- 🆔 **Identificación visual**: muestra un identificador en pantalla.
+- 🆔 **Identificación predecible**: Asigna IDs simples ("1", "2", "3") ordenados de izquierda a derecha.
 - 💾 **Soporte offline**: muestra archivos locales (assets) sincronizados desde la plataforma central.
-- 🧠 **Persistencia básica de estado**: reanuda configuración tras reinicios (por ejemplo, `deviceId` ligado al salón).
+- 🧠 **Persistencia de estado por posición**: Recuerda la URL asignada a cada monitor según su orden físico (pantalla 1, pantalla 2...).
 - 🔐 **Validación de comandos**: los datos recibidos se validan con **Zod** antes de ser ejecutados.
 
 ---
@@ -223,6 +223,7 @@ screensWeb-agent/
 
 - Comprobar que Windows detecta todas las pantallas (Configuración de pantalla).
 - Reiniciar el agente después de cambiar la configuración de monitores.
+- **Nota**: Los IDs (1, 2, 3) se asignan de izquierda a derecha según la configuración de Windows. Alinea las pantallas en Windows para coincidir con la realidad.
 
 ### No se actualiza
 

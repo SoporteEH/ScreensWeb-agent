@@ -1,5 +1,6 @@
 const { app, BrowserWindow, screen } = require('electron');
 const { autoUpdater } = require('electron-updater');
+const log = require('electron-log');
 const { machineIdSync } = require('node-machine-id');
 const { io } = require('socket.io-client');
 const path = require('path');
@@ -7,21 +8,21 @@ const fs = require('fs');
 const { jwtDecode } = require('jwt-decode');
 const fetch = require('node-fetch');
 const { exec } = require('child_process');
-const log = require('electron-log');
+
 autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = 'info';
 log.info('App starting...');
 
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
-  app.quit();
+    app.quit();
 } else {
-  app.on('second-instance', () => {
-    if (provisionWindow && !provisionWindow.isDestroyed()) {
-      if (provisionWindow.isMinimized()) provisionWindow.restore();
-      provisionWindow.focus();
-    }
-  });
+    app.on('second-instance', () => {
+        if (provisionWindow && !provisionWindow.isDestroyed()) {
+            if (provisionWindow.isMinimized()) provisionWindow.restore();
+            provisionWindow.focus();
+        }
+    });
 }
 
 app.disableHardwareAcceleration();
@@ -31,30 +32,42 @@ if (require('electron-squirrel-startup')) {
 }
 
 // CONSTANTES Y CONFIGURACIÓN
-
 const SERVER_URL = process.env.SERVER_URL || 'http://192.168.1.137:3000';
-const CONFIG_DIR = path.join(app.getPath('userData'), 'LuckiaScreensWeb');
-const CONFIG_FILE_PATH = path.join(CONFIG_DIR, 'luckia-config.json');
-const STATE_FILE_PATH = path.join(CONFIG_DIR, 'luckia-state.json');
+const CONFIG_DIR = path.join(app.getPath('userData'), 'ScreensWeb');
+const CONFIG_FILE_PATH = path.join(CONFIG_DIR, 'config.json');
+const STATE_FILE_PATH = path.join(CONFIG_DIR, 'state.json');
 const AGENT_REFRESH_URL = `${SERVER_URL}/api/auth/agent-refresh`;
-const CONTENT_DIR = path.join(app.getPath('userData'), 'LuckiaScreensWeb', 'content');
+const CONTENT_DIR = path.join(app.getPath('userData'), 'ScreensWeb', 'content');
 const SYNC_API_URL = `${SERVER_URL}/api/users/me/local-assets`;
 
 console.log(`[CONFIG]: Usando servidor: ${SERVER_URL}`);
-console.log(`[CONFIG]: Directorio de contenido local: ${CONTENT_DIR}`)
+console.log(`[CONFIG]: Directorio de contenido local: ${CONTENT_DIR}`);
+
+// CONSTANTES
+const CONSTANTS = {
+    HEARTBEAT_INTERVAL_MS: 30 * 1000,
+    TOKEN_CHECK_INTERVAL_MS: 4 * 60 * 60 * 1000,
+    UPDATE_CHECK_MIN_DELAY_MS: 15000,
+    UPDATE_CHECK_MAX_DELAY_MS: 60000,
+    SCREEN_DEBOUNCE_MS: 500,
+    RETRY_BACKOFF_BASE_MS: 30 * 1000,
+    MAX_RETRIES: 5,
+    GC_INTERVAL_MS: 4 * 60 * 60 * 1000
+};
 
 // VARIABLES GLOBALES
-
-let deviceId;           // ID único de la máquina.
-let agentToken;         // JWT de autenticación para el agente.
-let socket;             // Instancia del cliente Socket.IO.
-let provisionWindow;    // Referencia a la ventana de vinculación.
-let tokenRefreshInterval; // Timer para el bucle de refresco del token.
-let isCheckingForUpdate = false;// Bandera cooldown de actualizacion.
-let isSyncing = false; // Bandera evita sincronizaciones simultaneas.
-let isOnline = false; // Bandera para indicar si la maquina esta conectada a internet.
-const managedWindows = new Map(); // Mapa para gestionar las ventanas de contenido abiertas
-const retryManager = new Map(); // Mapa para gestionar los reintentos
+let deviceId;
+let agentToken;
+let socket;
+let provisionWindow;
+let tokenRefreshInterval;
+let isCheckingForUpdate = false;
+let isSyncing = false;
+let isOnline = false;
+let screenChangeTimeout; // Para el debounce de pantallas
+const managedWindows = new Map();
+const retryManager = new Map();
+const hardwareIdToDisplayMap = new Map();
 
 // FUNCIONES CONFIGURACIÓN Y AUTENTICACIÓN
 
@@ -202,7 +215,7 @@ function startProvisioningMode() {
     });
 
     socket.on('provision-success', async () => {
-        console.log('[PROVISIONING]: Señal de provision recibida del servidor. Obteniendo token de agente...');
+        console.log('[PROVISIONING]: Pin de vinculacion del servidor recibido. Obteniendo token de agente...');
 
         try {
             const response = await fetch(`${SERVER_URL}/api/auth/agent-token`, {
@@ -242,67 +255,62 @@ function startProvisioningMode() {
 
 // MODO NORMAL
 
-function startNormalMode() {
+// Manejador Debounced para cambios de pantalla
+function onScreenChange(reason) {
+    if (screenChangeTimeout) clearTimeout(screenChangeTimeout);
+
+    console.log(`[DISPLAY]: Detectado cambio de pantalla (${reason}). Esperando estabilización...`);
+
+    screenChangeTimeout = setTimeout(async () => {
+        console.log('[DISPLAY]: Entorno estabilizado. Actualizando mapa de pantallas.');
+        await buildDisplayMap();
+        if (socket?.connected) {
+            registerDevice();
+            // Restaurar URLs para pantallas nuevas o reconectadas
+            if (reason === 'added') {
+                setTimeout(restoreLastState, 1000);
+            }
+        }
+    }, CONSTANTS.SCREEN_DEBOUNCE_MS);
+}
+
+async function startNormalMode() {
     const config = loadConfig();
     deviceId = config.deviceId;
     agentToken = config.agentToken;
     console.log(`[NORMAL]: ID de Maquina cargado: ${deviceId}`);
 
     startTokenRefreshLoop();
+
+    // Construye el mapa de pantallas por primera vez ANTES de conectar
+    await buildDisplayMap();
+
     connectToSocketServer(agentToken);
 
     setTimeout(restoreLastState, 2000);
-    setTimeout(checkForUpdates, 15000 + Math.random() * 60000);
+    // Offset aleatorio para evitar picos en el servidor
+    const updateDelay = CONSTANTS.UPDATE_CHECK_MIN_DELAY_MS + Math.random() * (CONSTANTS.UPDATE_CHECK_MAX_DELAY_MS - CONSTANTS.UPDATE_CHECK_MIN_DELAY_MS);
+    setTimeout(checkForUpdates, updateDelay);
 
-    screen.on('display-added', (event, newDisplay) => {
-        console.log(`[DISPLAY]: Nueva pantalla detectada: ID ${newDisplay.id}`);
-        if (socket?.connected) {
-            registerDevice();
-            const lastState = loadLastState();
-            const stableId = getStableScreenId(newDisplay);
-            if (lastState[stableId]) {
-                console.log(`[STATE]: Restaurando estado para la pantalla recién conectada ${newDisplay.id}...`);
-                handleShowUrl({
-                    action: 'show_url',
-                    screenIndex: stableId,
-                    url: lastState[stableId],
-                });
-            }
-        }
-    });
+    screen.on('display-added', () => onScreenChange('added'));
+    screen.on('display-removed', () => onScreenChange('removed'));
+    screen.on('display-metrics-changed', () => onScreenChange('metrics-changed'));
 
-    screen.on('display-removed', () => {
-        console.log('[DISPLAY]: Se ha desconectado una pantalla.');
-        if (socket?.connected) {
-            registerDevice();
-        }
-    });
+    setInterval(sendHeartbeat, CONSTANTS.HEARTBEAT_INTERVAL_MS);
 
-    screen.on('display-metrics-changed', () => {
-        console.log('[DISPLAY]: Las métricas de una pantalla han cambiado (resolución, etc.).');
-        if (socket?.connected) {
-            registerDevice();
-        }
-    });
-
-    setInterval(sendHeartbeat, 30 * 1000);
-
-    // --- OPTIMIZACIÓN: GESTIÓN DE MEMORIA PERIÓDICA ---
     setInterval(() => {
         if (managedWindows.size > 0) {
             console.log('[OPTIMIZATION]: Forzando recolección de basura y limpieza de caché.');
             managedWindows.forEach(win => {
                 if (win && !win.isDestroyed()) {
-                    const session = win.webContents.session;
-                    session.clearCache().catch(err => console.error('[OPTIMIZATION] Error al limpiar caché:', err));
-                    session.clearStorageData();
+                    win.webContents.session.clearCache().catch(err => console.error('[OPTIMIZATION] Error al limpiar caché:', err));
+                    win.webContents.session.clearStorageData();
                     win.webContents.collectGarbage();
                 }
             });
         }
-    }, 4 * 60 * 60 * 1000); // 4 horas
+    }, CONSTANTS.GC_INTERVAL_MS);
 }
-
 
 /**
  * Establece la conexión con el servidor de WebSocket y configura los listeners de eventos.
@@ -398,47 +406,61 @@ function handleForceUpdate() {
  * Recopila información sobre las pantallas conectadas (usando IDs estables)
  * y la envía al servidor.
  */
-function registerDevice() {
-    const displays = screen.getAllDisplays();
-    const screenInfo = displays.map((d, index) => ({
-        id: getStableScreenId(d),
-        size: { width: Math.round(d.size.width * d.scaleFactor), height: Math.round(d.size.height * d.scaleFactor) }
+async function registerDevice() {
+    const screenInfo = Array.from(hardwareIdToDisplayMap.entries()).map(([hardwareId, display]) => ({
+        id: hardwareId,
+        size: { width: Math.round(display.size.width * display.scaleFactor), height: Math.round(display.size.height * display.scaleFactor) }
     }));
-    console.log('[NORMAL]: Enviando informacion de pantallas con IDs estables:', screenInfo);
+
+    console.log('[NORMAL]: Enviando informacion de pantallas con IDs de HARDWARE:', screenInfo);
     if (socket && socket.connected) {
         socket.emit('registerDevice', { deviceId, screens: screenInfo });
     }
 }
 
-// MANEJO DE ESTADO Y COMANDOS
+// NOTA: Las funciones getStableScreenId y getHardwareScreenId fueron eliminadas
+// porque el sistema ahora usa IDs simples secuenciales (1, 2, 3...) ordenados por posición
 
 /**
- * Genera un ID único y estable para una pantalla basado en su índice en el array
- * y sus coordenadas. Esto es más robusto que usar solo las coordenadas.
- * @param {object} display - El objeto de pantalla de Electron.
- * @param {number} index - El índice de la pantalla en el array de screen.getAllDisplays().
- * @returns {string} Un ID como 'idx0-x0-y0'.
+ * Construye el mapa de pantallas usando IDs simples ordenados por posición.
+ * Los IDs son secuenciales: "1", "2", "3"... ordenados de izquierda a derecha.
  */
-function getStableScreenId(display) {
-    const { x, y, width, height } = display.bounds;
-    return `x${x}-y${y}-w${width}-h${height}`;
+async function buildDisplayMap() {
+    hardwareIdToDisplayMap.clear();
+    const displays = screen.getAllDisplays();
+
+    // Ordenar pantallas por posición X (izquierda a derecha)
+    displays.sort((a, b) => a.bounds.x - b.bounds.x);
+
+    displays.forEach((display, index) => {
+        const simpleId = String(index + 1); // "1", "2", "3"...
+        hardwareIdToDisplayMap.set(simpleId, display);
+    });
+
+    console.log('[DISPLAY_MAP]: Mapa de pantallas actualizado:', Array.from(hardwareIdToDisplayMap.keys()));
 }
+
 
 /**
  * Guarda la URL actual de una pantalla en el archivo de estado.
- * @param {object} display - El objeto de pantalla de Electron.
- * @param {string|null} url - La URL a guardar, o null para eliminarla.
+ * @param {string} screenIndex - El ID simple de la pantalla ("1", "2", etc.)
+ * @param {string|null} url - La URL a guardar o null para eliminar
  */
-function saveCurrentState(display, url) {
+function saveCurrentState(screenIndex, url) {
     let state = loadLastState();
-    const stableId = getStableScreenId(display);
 
     if (url) {
-        state[stableId] = url;
+        state[screenIndex] = url;
     } else {
-        delete state[stableId];
+        delete state[screenIndex];
     }
-    fs.writeFileSync(STATE_FILE_PATH, JSON.stringify(state, null, 2));
+
+    try {
+        fs.writeFileSync(STATE_FILE_PATH, JSON.stringify(state, null, 2));
+        console.log(`[STATE]: Estado guardado para pantalla ${screenIndex}: ${url || '(vacío)'}`);
+    } catch (error) {
+        console.error('[STATE]: Error al guardar estado:', error);
+    }
 }
 
 /**
@@ -448,34 +470,59 @@ function saveCurrentState(display, url) {
 function loadLastState() {
     try {
         if (fs.existsSync(STATE_FILE_PATH)) {
-            const data = fs.readFileSync(STATE_FILE_PATH, 'utf8');
-            return JSON.parse(data) || {};
+            return JSON.parse(fs.readFileSync(STATE_FILE_PATH, 'utf8')) || {};
         }
     } catch (error) {
-        console.error('[STATE]: Error al leer el archivo de estado:', error);
+        console.error('[STATE]: Error al leer o parsear el archivo de estado:', error);
     }
     return {};
+}
+
+/**
+ * Limpia el estado de pantallas que ya no existen.
+ * Evita acumulación de entradas huérfanas en state.json.
+ */
+function cleanOrphanedState() {
+    const state = loadLastState();
+    const validIds = Array.from(hardwareIdToDisplayMap.keys());
+    const cleanedState = {};
+
+    for (const [id, url] of Object.entries(state)) {
+        if (validIds.includes(id)) {
+            cleanedState[id] = url;
+        } else {
+            console.log(`[STATE]: Limpiando entrada huérfana para pantalla inexistente: ${id}`);
+        }
+    }
+
+    try {
+        fs.writeFileSync(STATE_FILE_PATH, JSON.stringify(cleanedState, null, 2));
+    } catch (error) {
+        console.error('[STATE]: Error al limpiar estado huérfano:', error);
+    }
+
+    return cleanedState;
 }
 
 /**
  * Restaura las URLs guardadas en las pantallas correspondientes al iniciar el agente.
  */
 function restoreLastState() {
-    const lastState = loadLastState();
+    // Limpiar entradas huérfanas antes de restaurar
+    const lastState = cleanOrphanedState();
     if (Object.keys(lastState).length === 0) return;
 
-    console.log('[STATE]: Restaurando último estado conocido:', lastState);
-    const currentDisplays = screen.getAllDisplays();
-    currentDisplays.forEach(display => {
-        const stableId = getStableScreenId(display);
-        if (lastState[stableId]) {
+    console.log('[STATE]: Restaurando ultimo estado conocido:', lastState);
+
+    for (const [stableId, url] of Object.entries(lastState)) {
+        if (hardwareIdToDisplayMap.has(stableId)) {
             handleShowUrl({
                 action: 'show_url',
                 screenIndex: stableId,
-                url: lastState[stableId],
+                url: url,
             });
         }
-    });
+    }
 }
 
 /**
@@ -608,10 +655,11 @@ function createContentWindow(display, urlToLoad, command) {
 }
 
 /**
- * Maneja el comando 'show_url', ahora buscando la pantalla por su ID estable geométrico.
+ * Maneja el comando 'show_url', ahora usando el mapa de hardware para encontrar la pantalla.
  * @param {object} command - El objeto del comando.
  * @param {number} [currentAttempt=0] - El número de intento de reintento actual.
  */
+
 function handleShowUrl(command, currentAttempt = 0) {
     const { screenIndex, url, credentials, contentName } = command;
 
@@ -620,14 +668,14 @@ function handleShowUrl(command, currentAttempt = 0) {
         retryManager.delete(screenIndex);
     }
 
-    const targetDisplay = screen.getAllDisplays().find(d => getStableScreenId(d) === screenIndex);
+    const targetDisplay = hardwareIdToDisplayMap.get(screenIndex);
 
     if (!targetDisplay) {
-        sendCommandFeedback(command, 'error', `Pantalla con ID '${screenIndex}' no encontrada.`);
+        sendCommandFeedback(command, 'error', `Pantalla con ID de hardware '${screenIndex}' no encontrada.`);
         return;
     }
 
-    saveCurrentState(targetDisplay, url);
+    saveCurrentState(screenIndex, url);
 
     if (!isOnline && !url.startsWith('local:')) {
         const errorMsg = `Error: Sin conexion. No se puede cargar la URL '${url}'. Se reintentara cuando vuelva la conexion.`;
@@ -666,30 +714,45 @@ function handleShowUrl(command, currentAttempt = 0) {
                     console.log('[AUTOLOGIN]: Pagina de Sportradar cargada. Inyectando script...');
                     const script = `
                         (() => {
-                            try {
-                                const usernameInput = document.querySelector('input[name="username"]') || document.querySelector('#username');
-                                const passwordInput = document.querySelector('input[name="password"]') || document.querySelector('#password');
-                                const loginButton = document.querySelector('button[type="submit"]') || document.querySelector('button[name="login"]');
-                                
-                                if (!usernameInput || !passwordInput || !loginButton) {
-                                    return { success: false, reason: 'Campos de login no encontrados. Ajusta los selectores CSS.' };
-                                }
-                                
-                                usernameInput.value = ${JSON.stringify(credentials.username)};
-                                usernameInput.dispatchEvent(new Event('input', { bubbles: true }));
-                                passwordInput.value = ${JSON.stringify(credentials.password)};
-                                passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
-                                loginButton.click();
-                                return { success: true };
-                            } catch (e) {
-                                return { success: false, reason: 'Excepcion al ejecutar script: ' + e.message };
-                            }
+                            return new Promise((resolve) => {
+                                let attempts = 0;
+                                const maxAttempts = 20; // 10 segundos total (500ms * 20)
+
+                                const tryLogin = () => {
+                                    try {
+                                        const usernameInput = document.querySelector('input[name="username"]') || document.querySelector('#username');
+                                        const passwordInput = document.querySelector('input[name="password"]') || document.querySelector('#password');
+                                        const loginButton = document.querySelector('button[type="submit"]') || document.querySelector('button[name="login"]');
+                                        
+                                        if (usernameInput && passwordInput && loginButton) {
+                                            usernameInput.value = ${JSON.stringify(credentials.username)};
+                                            usernameInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                            passwordInput.value = ${JSON.stringify(credentials.password)};
+                                            passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                            loginButton.click();
+                                            resolve({ success: true, attempts });
+                                            return;
+                                        }
+
+                                        attempts++;
+                                        if (attempts >= maxAttempts) {
+                                            resolve({ success: false, reason: 'Timeout: Campos de login no encontrados tras 10s.' });
+                                        } else {
+                                            setTimeout(tryLogin, 500);
+                                        }
+                                    } catch (e) {
+                                        resolve({ success: false, reason: 'Excepcion: ' + e.message });
+                                    }
+                                };
+
+                                tryLogin();
+                            });
                         })();
                     `;
                     win.webContents.executeJavaScript(script)
                         .then(result => {
                             if (result?.success) {
-                                console.log('[AUTOLOGIN]: Script inyectado con éxito.');
+                                console.log(`[AUTOLOGIN]: Script exitoso tras ${result.attempts} intentos.`);
                             } else {
                                 console.warn('[AUTOLOGIN]: Falló la inyección:', result?.reason);
                             }
@@ -707,7 +770,7 @@ function handleShowUrl(command, currentAttempt = 0) {
         }
 
         const displayName = contentName || url;
-        const successMsg = `Iniciando carga de '${displayName}' en la pantalla.`;
+        const successMsg = `Enviando '${displayName}' a la pantalla ${screenIndex}`;
         sendCommandFeedback(command, 'success', successMsg);
 
     } catch (error) {
@@ -723,27 +786,29 @@ function handleShowUrl(command, currentAttempt = 0) {
  */
 function handleCloseScreen(command) {
     const { screenIndex } = command;
-    const win = managedWindows.get(screenIndex);
 
-    if (win && !win.isDestroyed()) {
-        win.close();
-    }
+    try {
+        const win = managedWindows.get(screenIndex);
 
-    const targetDisplay = screen.getAllDisplays().find(d => getStableScreenId(d) === screenIndex);
+        if (win && !win.isDestroyed()) {
+            win.close();
+        }
 
-    if (targetDisplay) {
-        saveCurrentState(targetDisplay, null);
+        // Guardar estado vacío y reportar al servidor
+        saveCurrentState(screenIndex, null);
         if (socket && socket.connected) {
             socket.emit('reportScreenState', { deviceId, screenId: screenIndex, url: '' });
         }
-    }
 
-    sendCommandFeedback(command, 'success', 'Comando de cierre ejecutado.');
+        sendCommandFeedback(command, 'success', `Pantalla ${screenIndex} cerrada`);
+    } catch (error) {
+        sendCommandFeedback(command, 'error', `Error al cerrar pantalla ${screenIndex}: ${error.message}`);
+    }
 }
 
 function handleIdentifyScreen(command) {
     const { screenIndex, identifierText } = command;
-    const targetDisplay = screen.getAllDisplays().find(d => getStableScreenId(d) === screenIndex);
+    const targetDisplay = hardwareIdToDisplayMap.get(screenIndex);
     if (!targetDisplay) return;
 
     const identifyWin = new BrowserWindow({
@@ -765,8 +830,7 @@ function handleIdentifyScreen(command) {
 
 function sendHeartbeat() {
     if (!socket || !socket.connected) return;
-    const displays = screen.getAllDisplays();
-    const connectedScreenIds = displays.map(d => getStableScreenId(d));
+    const connectedScreenIds = Array.from(hardwareIdToDisplayMap.keys());
     socket.emit('heartbeat', { screenIds: connectedScreenIds });
     console.log('[HEARTBEAT]: Enviando latido con pantallas activas:', connectedScreenIds);
 }
@@ -787,7 +851,6 @@ async function syncLocalAssets() {
     console.log('[SYNC]: Iniciando proceso de sincronizacion de activos locales...');
 
     try {
-        // --- Obtiene lista de activos del servidor ---
         console.log('[SYNC-DEBUG]: Pidiendo lista de activos desde el servidor...');
         const response = await fetch(SYNC_API_URL, {
             headers: { 'Authorization': `Bearer ${agentToken}` }
@@ -796,18 +859,16 @@ async function syncLocalAssets() {
             throw new Error(`Error del servidor al obtener la lista de activos: ${response.status}`);
         }
         const serverAssets = await response.json();
-        console.log(`[SYNC-DEBUG]: El servidor dice que debo tener ${serverAssets.length} archivos:`, serverAssets.map(a => a.originalFilename));
+        console.log(`[SYNC - DEBUG]: El servidor dice que debo tener ${serverAssets.length} archivos: `, serverAssets.map(a => a.originalFilename));
 
         const serverAssetMap = new Map(serverAssets.map(asset => [asset.serverFilename, asset]));
 
-        // --- Lee archivos locales existentes
         if (!fs.existsSync(CONTENT_DIR)) {
             fs.mkdirSync(CONTENT_DIR, { recursive: true });
         }
         const localFiles = fs.readdirSync(CONTENT_DIR);
-        console.log(`[SYNC-DEBUG]: Encontrados ${localFiles.length} archivos locales en disco.`);
+        console.log(`[SYNC - DEBUG]: Encontrados ${localFiles.length} archivos locales en disco.`);
 
-        // --- Determina que archivos eliminr
         const filesToDelete = localFiles.filter(file => !serverAssetMap.has(file));
         if (filesToDelete.length > 0) {
             console.log('[SYNC-DEBUG]: Archivos a eliminar:', filesToDelete);
@@ -816,18 +877,17 @@ async function syncLocalAssets() {
                     fs.unlinkSync(path.join(CONTENT_DIR, fileToDelete));
                     console.log(`[SYNC]: Archivo obsoleto eliminado: ${fileToDelete}`);
                 } catch (err) {
-                    console.error(`[SYNC]: Error al eliminar el archivo ${fileToDelete}:`, err);
+                    console.error(`[SYNC]: Error al eliminar el archivo ${fileToDelete}: `, err);
                 }
             }
         }
 
-        // --- Determina qué archivos descargar
         const filesToDownload = serverAssets.filter(asset => !localFiles.includes(asset.serverFilename));
         if (filesToDownload.length > 0) {
             console.log('[SYNC-DEBUG]: Archivos a descargar:', filesToDownload.map(a => a.originalFilename));
             for (const assetToDownload of filesToDownload) {
                 console.log(`[SYNC]: Descargando nuevo activo: ${assetToDownload.originalFilename}...`);
-                const downloadUrl = `${SERVER_URL}/local-assets/${assetToDownload.serverFilename}`;
+                const downloadUrl = `${SERVER_URL} / local - assets / ${assetToDownload.serverFilename}`;
                 const destinationPath = path.join(CONTENT_DIR, assetToDownload.serverFilename);
 
                 try {
@@ -842,7 +902,7 @@ async function syncLocalAssets() {
                     });
                     console.log(`[SYNC]: Descarga completa: ${assetToDownload.originalFilename}`);
                 } catch (err) {
-                    console.error(`[SYNC]: Error al descargar ${assetToDownload.originalFilename}:`, err);
+                    console.error(`[SYNC]: Error al descargar ${assetToDownload.originalFilename}: `, err);
                     if (fs.existsSync(destinationPath)) {
                         fs.unlinkSync(destinationPath);
                     }
@@ -864,13 +924,15 @@ async function syncLocalAssets() {
 // CICLO DE VIDA DE LA APP
 
 const initialConfig = loadConfig();
-if (!initialConfig.deviceId) {
-    console.log('[INIT]: No se encontro configuracion. Iniciando modo vinculacion.');
-    app.whenReady().then(startProvisioningMode);
-} else {
-    console.log('[INIT]: Configuracion encontrada. Iniciando modo normal.');
-    app.whenReady().then(startNormalMode);
-}
+app.whenReady().then(() => {
+    if (!initialConfig.deviceId) {
+        console.log('[INIT]: No se encontro configuracion. Iniciando modo vinculacion.');
+        startProvisioningMode();
+    } else {
+        console.log('[INIT]: Configuracion encontrada. Iniciando modo normal.');
+        startNormalMode();
+    }
+});
 
 app.on('window-all-closed', () => {
     if (provisionWindow && !provisionWindow.isDestroyed()) {
