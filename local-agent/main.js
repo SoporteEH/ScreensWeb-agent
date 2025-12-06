@@ -414,7 +414,7 @@ async function registerDevice() {
 
     console.log('[NORMAL]: Enviando informacion de pantallas con IDs de HARDWARE:', screenInfo);
     if (socket && socket.connected) {
-        socket.emit('registerDevice', { deviceId, screens: screenInfo });
+        socket.emit('registerDevice', { deviceId, screens: screenInfo, agentVersion: app.getVersion() });
     }
 }
 
