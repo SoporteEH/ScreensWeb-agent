@@ -168,20 +168,76 @@ function startTokenRefreshLoop() {
 
 // LÓGICA DEL ACTUALIZADOR AUTOMÁTICO
 
+// Configuración del autoUpdater
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
+autoUpdater.allowPrerelease = false;
+
+// Deshabilitar actualizaciones diferenciales para evitar problemas de checksum
+autoUpdater.allowDowngrade = true;
+autoUpdater.allowPrerelease = false;
+autoUpdater.autoDownload = true;
+autoUpdater.forceDevUpdateConfig = true;
+autoUpdater.fullChangelog = true;
+
 /**
  * Configura los listeners de electron-updater y busca actualizaciones.
  */
 const checkForUpdates = () => {
     console.log('[UPDATER]: Buscando actualizaciones...');
-    autoUpdater.on('update-available', () => console.log('[UPDATER]: ¡Actualizacion disponible! Empezando descarga...'));
-    autoUpdater.on('update-not-available', () => console.log('[UPDATER]: Ya estas en la ultima version.'));
-    autoUpdater.on('error', (err) => console.error('[UPDATER]: Error en la actualizacion:', err));
-    autoUpdater.on('download-progress', (p) => console.log(`[UPDATER]: Descargando ${p.percent.toFixed(2)}%`));
-    autoUpdater.on('update-downloaded', () => {
-        console.log('[UPDATER]: Actualizacion descargada. Se instalara al reiniciar.');
-        autoUpdater.quitAndInstall();
+    
+    // Limpiar listeners anteriores para evitar duplicados
+    autoUpdater.removeAllListeners('update-available');
+    autoUpdater.removeAllListeners('update-not-available');
+    autoUpdater.removeAllListeners('error');
+    autoUpdater.removeAllListeners('download-progress');
+    autoUpdater.removeAllListeners('update-downloaded');
+
+    autoUpdater.on('update-available', (info) => {
+        console.log('[UPDATER]: ¡Actualización disponible! Versión:', info.version);
+        console.log('[UPDATER]: Iniciando descarga...');
     });
-    autoUpdater.checkForUpdates();
+
+    autoUpdater.on('update-not-available', () => {
+        console.log('[UPDATER]: Ya estás en la última versión.');
+        isCheckingForUpdate = false;
+    });
+
+    autoUpdater.on('error', (err) => {
+        console.error('[UPDATER]: Error en la actualización:', err);
+        isCheckingForUpdate = false;
+        
+        // Intentar con una descarga completa después de un error
+        if (err.message && err.message.includes('checksum')) {
+            console.log('[UPDATER]: Error de checksum. Intentando descarga completa...');
+            autoUpdater.autoDownload = true;
+            autoUpdater.allowDowngrade = true;
+            autoUpdater.checkForUpdates();
+        }
+    });
+
+    autoUpdater.on('download-progress', (progressObj) => {
+        console.log(`[UPDATER]: Descargando: ${Math.round(progressObj.percent)}%`);
+    });
+
+    autoUpdater.on('update-downloaded', (info) => {
+        console.log('[UPDATER]: Actualización descargada. Versión:', info.version);
+        console.log('[UPDATER]: La actualización se instalará al reiniciar la aplicación.');
+        // Forzar la instalación después de 5 segundos
+        setTimeout(() => {
+            autoUpdater.quitAndInstall(true, true);
+        }, 5000);
+    });
+
+    // Forzar la descarga completa
+    autoUpdater.disableWebInstaller = true;
+    autoUpdater.allowDowngrade = true;
+    
+    // Iniciar la búsqueda de actualizaciones
+    autoUpdater.checkForUpdates().catch(error => {
+        console.error('[UPDATER]: Error al buscar actualizaciones:', error);
+        isCheckingForUpdate = false;
+    });
 };
 
 // MODO VINCULACIÓN (PROVISIONING)
@@ -197,7 +253,7 @@ function startProvisioningMode() {
         width: 800,
         height: 400,
         center: true,
-        icon: path.join(__dirname, 'build/icon.png'),
+        icon: path.join(__dirname, 'icons/icon.ico'),
         webPreferences: { preload: path.join(__dirname, 'preload.js') },
         title: "Asistente de Vinculacion"
     });
