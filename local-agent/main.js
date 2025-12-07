@@ -767,32 +767,55 @@ function handleShowUrl(command, currentAttempt = 0) {
             console.log(`[AUTOLOGIN]: Configurando listener para Sportradar...`);
             win.webContents.on('did-finish-load', () => {
                 if (!win.isDestroyed() && win.webContents.getURL().startsWith('https://lcr.sportradar.com')) {
-                    console.log('[AUTOLOGIN]: Pagina de Sportradar cargada. Inyectando script...');
+                    console.log('[AUTOLOGIN]: Pagina de Sportradar cargada. Inyectando script mejorado...');
+
+                    // Script actualizado con selectores de la imagen y bypass de React
                     const script = `
                         (() => {
                             return new Promise((resolve) => {
+                                // Funcion auxiliar para forzar la entrada de datos en React/Frameworks
+                                const setNativeValue = (element, value) => {
+                                    const valueSetter = Object.getOwnPropertyDescriptor(element, 'value').set;
+                                    const prototype = Object.getPrototypeOf(element);
+                                    const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value').set;
+                                    
+                                    if (valueSetter && valueSetter !== prototypeValueSetter) {
+                                        prototypeValueSetter.call(element, value);
+                                    } else {
+                                        valueSetter.call(element, value);
+                                    }
+                                    
+                                    element.dispatchEvent(new Event('input', { bubbles: true }));
+                                    element.dispatchEvent(new Event('change', { bubbles: true })); // Evento extra por seguridad
+                                };
+
                                 let attempts = 0;
-                                const maxAttempts = 20; // 10 segundos total (500ms * 20)
+                                const maxAttempts = 20; // 10 segundos total
 
                                 const tryLogin = () => {
                                     try {
-                                        const usernameInput = document.querySelector('input[name="username"]') || document.querySelector('#username');
-                                        const passwordInput = document.querySelector('input[name="password"]') || document.querySelector('#password');
-                                        const loginButton = document.querySelector('button[type="submit"]') || document.querySelector('button[name="login"]');
+                                        // Selectores basados en tu imagen:
+                                        const usernameInput = document.querySelector('input[name="username"]');
+                                        const passwordInput = document.querySelector('input[name="password"]');
+                                        const loginButton = document.querySelector('button[type="submit"]');
                                         
                                         if (usernameInput && passwordInput && loginButton) {
-                                            usernameInput.value = ${JSON.stringify(credentials.username)};
-                                            usernameInput.dispatchEvent(new Event('input', { bubbles: true }));
-                                            passwordInput.value = ${JSON.stringify(credentials.password)};
-                                            passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
-                                            loginButton.click();
-                                            resolve({ success: true, attempts });
+                                            // Usamos la funcion especial para escribir
+                                            setNativeValue(usernameInput, ${JSON.stringify(credentials.username)});
+                                            setNativeValue(passwordInput, ${JSON.stringify(credentials.password)});
+                                            
+                                            // Esperamos un instante muy breve antes de clickar (simulacion humana)
+                                            setTimeout(() => {
+                                                loginButton.click();
+                                                resolve({ success: true, attempts });
+                                            }, 200);
+                                            
                                             return;
                                         }
 
                                         attempts++;
                                         if (attempts >= maxAttempts) {
-                                            resolve({ success: false, reason: 'Timeout: Campos de login no encontrados tras 10s.' });
+                                            resolve({ success: false, reason: 'Timeout: Elementos (username/password/submit) no encontrados.' });
                                         } else {
                                             setTimeout(tryLogin, 500);
                                         }
