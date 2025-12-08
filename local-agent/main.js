@@ -9,8 +9,6 @@ const { jwtDecode } = require('jwt-decode');
 const fetch = require('node-fetch');
 const { exec } = require('child_process');
 
-autoUpdater.logger = log;
-autoUpdater.logger.transports.file.level = 'info';
 log.info('App starting...');
 
 const gotTheLock = app.requestSingleInstanceLock();
@@ -169,14 +167,20 @@ function startTokenRefreshLoop() {
 // LÓGICA DEL ACTUALIZADOR AUTOMÁTICO
 
 // Configuración del autoUpdater
+autoUpdater.logger = log;
+autoUpdater.logger.transports.file.level = 'info';
+
+// Configuración básica de actualización
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
-autoUpdater.allowPrerelease = false;
 
-// Deshabilitar actualizaciones diferenciales para evitar problemas de checksum
+// evita problemas comunes
+// - Permite downgrade para forzar actualizaciones completas
+// - Desactiva actualizaciones pre-release a menos que sea necesario
 autoUpdater.allowDowngrade = true;
 autoUpdater.allowPrerelease = false;
-autoUpdater.autoDownload = true;
+
+// forzar descargas completas y evitar problemas de checksum
 autoUpdater.forceDevUpdateConfig = true;
 autoUpdater.fullChangelog = true;
 
@@ -498,15 +502,20 @@ async function buildDisplayMap() {
 
 
 /**
- * Guarda la URL actual de una pantalla en el archivo de estado.
+ * Guarda el estado actual de una pantalla en el archivo de estado.
  * @param {string} screenIndex - El ID simple de la pantalla ("1", "2", etc.)
  * @param {string|null} url - La URL a guardar o null para eliminar
+ * @param {object|null} credentials - Credenciales para autenticación automática
  */
-function saveCurrentState(screenIndex, url) {
+function saveCurrentState(screenIndex, url, credentials = null) {
     let state = loadLastState();
 
     if (url) {
-        state[screenIndex] = url;
+        state[screenIndex] = {
+            url: url,
+            credentials: credentials || null,
+            timestamp: new Date().toISOString()
+        };
     } else {
         delete state[screenIndex];
     }
@@ -526,7 +535,27 @@ function saveCurrentState(screenIndex, url) {
 function loadLastState() {
     try {
         if (fs.existsSync(STATE_FILE_PATH)) {
-            return JSON.parse(fs.readFileSync(STATE_FILE_PATH, 'utf8')) || {};
+            const state = JSON.parse(fs.readFileSync(STATE_FILE_PATH, 'utf8')) || {};
+            // Migrar estado antiguo al nuevo formato si es necesario
+            const migratedState = {};
+            for (const [key, value] of Object.entries(state)) {
+                if (typeof value === 'string') {
+                    // Formato antiguo (solo URL)
+                    migratedState[key] = {
+                        url: value,
+                        credentials: null,
+                        timestamp: new Date().toISOString()
+                    };
+                } else {
+                    // Ya está en el nuevo formato
+                    migratedState[key] = value;
+                }
+            }
+            // Si hubo migración, guardar el estado actualizado
+            if (JSON.stringify(state) !== JSON.stringify(migratedState)) {
+                fs.writeFileSync(STATE_FILE_PATH, JSON.stringify(migratedState, null, 2));
+            }
+            return migratedState;
         }
     } catch (error) {
         console.error('[STATE]: Error al leer o parsear el archivo de estado:', error);
@@ -568,15 +597,21 @@ function restoreLastState() {
     const lastState = cleanOrphanedState();
     if (Object.keys(lastState).length === 0) return;
 
-    console.log('[STATE]: Restaurando ultimo estado conocido:', lastState);
+    console.log('[STATE]: Restaurando ultimo estado conocido:', JSON.stringify(lastState, null, 2));
 
-    for (const [stableId, url] of Object.entries(lastState)) {
+    for (const [stableId, screenData] of Object.entries(lastState)) {
         if (hardwareIdToDisplayMap.has(stableId)) {
-            handleShowUrl({
+            const command = {
                 action: 'show_url',
                 screenIndex: stableId,
-                url: url,
-            });
+                url: screenData.url,
+                credentials: screenData.credentials || null
+            };
+            
+            // Pequeño retraso entre restauraciones para evitar sobrecarga
+            setTimeout(() => {
+                handleShowUrl(command);
+            }, 500);
         }
     }
 }
@@ -731,7 +766,7 @@ function handleShowUrl(command, currentAttempt = 0) {
         return;
     }
 
-    saveCurrentState(screenIndex, url);
+    saveCurrentState(screenIndex, url, credentials);
 
     if (!isOnline && !url.startsWith('local:')) {
         const errorMsg = `Error: Sin conexion. No se puede cargar la URL '${url}'. Se reintentara cuando vuelva la conexion.`;
@@ -966,7 +1001,7 @@ async function syncLocalAssets() {
             console.log('[SYNC-DEBUG]: Archivos a descargar:', filesToDownload.map(a => a.originalFilename));
             for (const assetToDownload of filesToDownload) {
                 console.log(`[SYNC]: Descargando nuevo activo: ${assetToDownload.originalFilename}...`);
-                const downloadUrl = `${SERVER_URL} / local - assets / ${assetToDownload.serverFilename}`;
+                const downloadUrl = `${SERVER_URL}/local-assets/${assetToDownload.serverFilename}`;
                 const destinationPath = path.join(CONTENT_DIR, assetToDownload.serverFilename);
 
                 try {
