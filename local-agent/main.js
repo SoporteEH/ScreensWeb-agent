@@ -1,4 +1,4 @@
-const { app, BrowserWindow, screen } = require('electron');
+const { app, BrowserWindow, screen, net } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
 const { machineIdSync } = require('node-machine-id');
@@ -50,7 +50,9 @@ const CONSTANTS = {
     SCREEN_DEBOUNCE_MS: 500,
     RETRY_BACKOFF_BASE_MS: 30 * 1000,
     MAX_RETRIES: 5,
-    GC_INTERVAL_MS: 4 * 60 * 60 * 1000
+    GC_INTERVAL_MS: 4 * 60 * 60 * 1000,
+    NETWORK_CHECK_INTERVAL_MS: 10 * 1000, // Intervalo de monitoreo de red
+    SOCKET_RECONNECT_DELAY_MAX_MS: 60 * 1000 // Máximo delay entre reconexiones
 };
 
 // VARIABLES GLOBALES
@@ -62,6 +64,8 @@ let tokenRefreshInterval;
 let isCheckingForUpdate = false;
 let isSyncing = false;
 let isOnline = false;
+let networkWasOffline = false; // Para detectar recuperación de red
+let networkCheckInterval; // Intervalo de monitoreo de red
 let screenChangeTimeout; // Para el debounce de pantallas
 const managedWindows = new Map();
 const retryManager = new Map();
@@ -189,7 +193,7 @@ autoUpdater.fullChangelog = true;
  */
 const checkForUpdates = () => {
     console.log('[UPDATER]: Buscando actualizaciones...');
-    
+
     // Limpiar listeners anteriores para evitar duplicados
     autoUpdater.removeAllListeners('update-available');
     autoUpdater.removeAllListeners('update-not-available');
@@ -198,7 +202,7 @@ const checkForUpdates = () => {
     autoUpdater.removeAllListeners('update-downloaded');
 
     autoUpdater.on('update-available', (info) => {
-        console.log('[UPDATER]: ¡Actualización disponible! Versión:', info.version);
+        console.log('[UPDATER]: ¡Actualización disponible! Version:', info.version);
         console.log('[UPDATER]: Iniciando descarga...');
     });
 
@@ -208,9 +212,9 @@ const checkForUpdates = () => {
     });
 
     autoUpdater.on('error', (err) => {
-        console.error('[UPDATER]: Error en la actualización:', err);
+        console.error('[UPDATER]: Error en la actualizacion:', err);
         isCheckingForUpdate = false;
-        
+
         // Intentar con una descarga completa después de un error
         if (err.message && err.message.includes('checksum')) {
             console.log('[UPDATER]: Error de checksum. Intentando descarga completa...');
@@ -225,8 +229,8 @@ const checkForUpdates = () => {
     });
 
     autoUpdater.on('update-downloaded', (info) => {
-        console.log('[UPDATER]: Actualización descargada. Versión:', info.version);
-        console.log('[UPDATER]: La actualización se instalará al reiniciar la aplicación.');
+        console.log('[UPDATER]: Actualizacion descargada. Version:', info.version);
+        console.log('[UPDATER]: La actualizacion se instalará al reiniciar la aplicación.');
         // Forzar la instalación después de 5 segundos
         setTimeout(() => {
             autoUpdater.quitAndInstall(true, true);
@@ -236,7 +240,7 @@ const checkForUpdates = () => {
     // Forzar la descarga completa
     autoUpdater.disableWebInstaller = true;
     autoUpdater.allowDowngrade = true;
-    
+
     // Iniciar la búsqueda de actualizaciones
     autoUpdater.checkForUpdates().catch(error => {
         console.error('[UPDATER]: Error al buscar actualizaciones:', error);
@@ -345,7 +349,14 @@ async function startNormalMode() {
     // Construye el mapa de pantallas por primera vez ANTES de conectar
     await buildDisplayMap();
 
+    // MEJORA: Restaurar contenido local ANTES de conectar (modo offline)
+    restoreLocalContentOffline();
+
+    // Conectar al servidor
     connectToSocketServer(agentToken);
+
+    // Iniciar monitoreo de conectividad de red
+    startNetworkMonitoring();
 
     setTimeout(restoreLastState, 2000);
     // Offset aleatorio para evitar picos en el servidor
@@ -373,30 +384,128 @@ async function startNormalMode() {
 }
 
 /**
+ * Restaura contenido local sin depender del servidor (modo offline).
+ * Se ejecuta al inicio para garantizar que las pantallas muestren contenido inmediatamente.
+ */
+function restoreLocalContentOffline() {
+    const lastState = loadLastState();
+    if (Object.keys(lastState).length === 0) {
+        console.log('[OFFLINE]: No hay estado previo para restaurar.');
+        return;
+    }
+
+    console.log('[OFFLINE]: Restaurando contenido local offline...');
+
+    for (const [stableId, screenData] of Object.entries(lastState)) {
+        // Solo restaurar contenido local (local:...) sin conexión
+        if (screenData.url && screenData.url.startsWith('local:') && hardwareIdToDisplayMap.has(stableId)) {
+            console.log(`[OFFLINE]: Restaurando contenido local en pantalla ${stableId}: ${screenData.url}`);
+            handleShowUrl({
+                action: 'show_url',
+                screenIndex: stableId,
+                url: screenData.url,
+                credentials: null
+            });
+        }
+    }
+}
+
+/**
+ * Inicia el monitoreo periódico de conectividad de red.
+ * Detecta pérdida y recuperación de conexión a internet.
+ * MEJORA: También fuerza reconexión si la red está online pero el socket está desconectado.
+ */
+function startNetworkMonitoring() {
+    if (networkCheckInterval) {
+        clearInterval(networkCheckInterval);
+    }
+
+    console.log('[NETWORK]: Iniciando monitoreo de conectividad de red.');
+
+    networkCheckInterval = setInterval(() => {
+        const online = net.isOnline();
+
+        if (!online && !networkWasOffline) {
+            // Acabamos de perder conexión
+            networkWasOffline = true;
+            console.log('[NETWORK]: Detectada perdida de conexion a internet.');
+        } else if (online && networkWasOffline) {
+            // Acabamos de recuperar conexión
+            console.log('[NETWORK]: Conexion a internet restaurada. Intentando reconectar...');
+            networkWasOffline = false;
+
+            // Forzar reconexión del socket si no está conectado
+            if (socket && !socket.connected) {
+                console.log('[NETWORK]: Forzando reconexion del socket...');
+                socket.connect();
+            }
+        } else if (online && socket && !socket.connected) {
+            // MEJORA: Red online pero socket desconectado (servidor reiniciado)
+            console.log('[NETWORK]: Red online pero socket desconectado. Forzando reconexion...');
+            socket.connect();
+        }
+    }, CONSTANTS.NETWORK_CHECK_INTERVAL_MS);
+}
+
+/**
  * Establece la conexión con el servidor de WebSocket y configura los listeners de eventos.
+ * Incluye reconexión infinita y manejo completo de eventos para máxima resiliencia.
  * @param {string} token - El JWT del agente para la autenticación.
  */
 function connectToSocketServer(token) {
     socket = io(SERVER_URL, {
-        reconnectionAttempts: 5,
+        reconnection: true,
+        reconnectionAttempts: Infinity,
         reconnectionDelay: 3000,
+        reconnectionDelayMax: CONSTANTS.SOCKET_RECONNECT_DELAY_MAX_MS,
+        randomizationFactor: 0.5,
+        timeout: 20000,
         auth: { token }
     });
 
     socket.on('connect', () => {
         isOnline = true;
-        console.log('[NORMAL]: Conectado al servidor de WebSocket.');
+        console.log('[SOCKET]: Conectado al servidor de WebSocket.');
         registerDevice();
         syncLocalAssets();
     });
 
     socket.on('disconnect', (reason) => {
         isOnline = false;
-        console.log(`[NORMAL]: Desconectado del servidor: ${reason}`);
+        console.log(`[SOCKET]: Desconectado del servidor. Razon: ${reason}`);
+
+        // Si el servidor forzó la desconexión, reconectar manualmente
+        if (reason === 'io server disconnect') {
+            console.log('[SOCKET]: El servidor cerro la conexion. Reconectando manualmente...');
+            socket.connect();
+        }
+        // Para otras razones (transport close, ping timeout, etc.), socket.io reconectará automáticamente
+    });
+
+    socket.on('reconnect', (attemptNumber) => {
+        console.log(`[SOCKET]:Reconectado exitosamente despues de ${attemptNumber} intentos.`);
+        isOnline = true;
+        registerDevice();
+        syncLocalAssets();
+        // Restaurar URLs remotas que pudieron fallar durante la desconexión
+        setTimeout(restoreLastState, 1000);
+    });
+
+    socket.on('reconnect_attempt', (attemptNumber) => {
+        console.log(`[SOCKET]:Intento de reconexion #${attemptNumber}...`);
+    });
+
+    socket.on('reconnect_error', (error) => {
+        console.error(`[SOCKET]: Error en intento de reconexion: ${error.message}`);
+    });
+
+    socket.on('connect_error', (error) => {
+        console.error(`[SOCKET]: Error de conexion: ${error.message}`);
+        // No hacer nada especial, socket.io manejará los reintentos automáticamente
     });
 
     socket.on('command', (command) => {
-        console.log('[NORMAL]: Comando recibido:', command);
+        console.log('[SOCKET]: Comando recibido:', command);
         if (command.action === 'show_url') handleShowUrl(command);
         if (command.action === 'close_screen') handleCloseScreen(command);
         if (command.action === 'identify_screen') handleIdentifyScreen(command);
@@ -477,9 +586,6 @@ async function registerDevice() {
         socket.emit('registerDevice', { deviceId, screens: screenInfo, agentVersion: app.getVersion() });
     }
 }
-
-// NOTA: Las funciones getStableScreenId y getHardwareScreenId fueron eliminadas
-// porque el sistema ahora usa IDs simples secuenciales (1, 2, 3...) ordenados por posición
 
 /**
  * Construye el mapa de pantallas usando IDs simples ordenados por posición.
@@ -607,7 +713,7 @@ function restoreLastState() {
                 url: screenData.url,
                 credentials: screenData.credentials || null
             };
-            
+
             // Pequeño retraso entre restauraciones para evitar sobrecarga
             setTimeout(() => {
                 handleShowUrl(command);
@@ -680,7 +786,8 @@ function scheduleRetry(command) {
  * @returns {BrowserWindow} La instancia de la ventana creada.
  */
 function createContentWindow(display, urlToLoad, command) {
-    const { screenIndex, url: originalUrl } = command;
+    // 1. Extraemos el contentName (si existe) del comando
+    const { screenIndex, url: originalUrl, contentName } = command;
     const fallbackPath = `file://${path.join(__dirname, 'fallback.html')}`;
 
     const win = new BrowserWindow({
@@ -702,21 +809,29 @@ function createContentWindow(display, urlToLoad, command) {
         }
     });
 
-    // Muestra la ventana solo cuando el contenido está listo para ser pintado
     win.once('ready-to-show', () => {
         win.show();
     });
 
+    // --- AQUÍ ESTÁ EL CAMBIO ---
     win.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
         console.error(`[RESILIENCE]: Fallo al cargar URL '${validatedURL}'. Razón: ${errorDescription}`);
 
+        // Ignorar errores del propio fallback
         if (validatedURL === fallbackPath) {
             console.error('[RESILIENCE]: ¡La página de fallback no se pudo cargar!');
             return;
         }
 
+        // Si hay un commandId, enviamos feedback al servidor
         if (command.commandId) {
-            const errorMsg = `Fallo al cargar URL '${originalUrl}'. Razón: ${errorDescription}`;
+            // LÓGICA DE VISUALIZACIÓN:
+            // Si tenemos 'contentName' (ej: "test fallback"), lo usamos.
+            // Si no, usamos la URL original.
+            const displayName = contentName ? `'${contentName}'` : `la URL '${originalUrl}'`;
+
+            const errorMsg = `Fallo al cargar ${displayName}. Razón: ${errorDescription}`;
+
             sendCommandFeedback(command, 'error', errorMsg);
         }
 
@@ -724,6 +839,7 @@ function createContentWindow(display, urlToLoad, command) {
             socket.emit('reportScreenState', { deviceId, screenId: screenIndex, url: '' });
         }
 
+        // Si es error de red y no es un activo local, reintentamos
         const isNetworkError = errorCode <= -100 && errorCode >= -199;
         if (!originalUrl.startsWith('local:') && isNetworkError) {
             scheduleRetry(command);
@@ -731,6 +847,7 @@ function createContentWindow(display, urlToLoad, command) {
 
         win.loadURL(fallbackPath);
     });
+    // ---------------------------
 
     win.on('closed', () => {
         managedWindows.delete(screenIndex);
