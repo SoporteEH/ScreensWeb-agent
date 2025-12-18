@@ -30,7 +30,8 @@ if (require('electron-squirrel-startup')) {
 }
 
 // CONSTANTES Y CONFIGURACIÓN
-const SERVER_URL = process.env.SERVER_URL || 'http://192.168.1.137:3000';
+//const SERVER_URL = process.env.SERVER_URL || 'http://192.168.1.137:3000';
+const SERVER_URL = process.env.SERVER_URL || 'http://192.168.1.134:3000';
 const CONFIG_DIR = path.join(app.getPath('userData'), 'ScreensWeb');
 const CONFIG_FILE_PATH = path.join(CONFIG_DIR, 'config.json');
 const STATE_FILE_PATH = path.join(CONFIG_DIR, 'state.json');
