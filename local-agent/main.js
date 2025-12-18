@@ -30,7 +30,8 @@ if (require('electron-squirrel-startup')) {
 }
 
 // CONSTANTES Y CONFIGURACIÓN
-const SERVER_URL = process.env.SERVER_URL || 'http://192.168.1.137:3000';
+//const SERVER_URL = process.env.SERVER_URL || 'http://192.168.1.137:3000';
+const SERVER_URL = process.env.SERVER_URL || 'http://192.168.1.134:3000';
 const CONFIG_DIR = path.join(app.getPath('userData'), 'ScreensWeb');
 const CONFIG_FILE_PATH = path.join(CONFIG_DIR, 'config.json');
 const STATE_FILE_PATH = path.join(CONFIG_DIR, 'state.json');
@@ -327,13 +328,55 @@ function onScreenChange(reason) {
 
     screenChangeTimeout = setTimeout(async () => {
         console.log('[DISPLAY]: Entorno estabilizado. Actualizando mapa de pantallas.');
+
+        // Guardar IDs de pantallas antes del cambio
+        const previousScreenIds = Array.from(hardwareIdToDisplayMap.keys());
+
         await buildDisplayMap();
+
+        const currentScreenIds = Array.from(hardwareIdToDisplayMap.keys());
+
+        if (reason === 'removed') {
+            // Cerrar SOLO las ventanas huerfanas (pantallas que ya no existen)
+            const orphanedIds = previousScreenIds.filter(id => !currentScreenIds.includes(id));
+            for (const orphanedId of orphanedIds) {
+                const win = managedWindows.get(orphanedId);
+                if (win && !win.isDestroyed()) {
+                    console.log(`[DISPLAY]: Cerrando ventana huerfana para pantalla ${orphanedId}`);
+                    win.close();
+                }
+                managedWindows.delete(orphanedId);
+            }
+        }
+
+        if (reason === 'added') {
+            // Identificar SOLO las pantallas nuevas (que no existian antes)
+            const newScreenIds = currentScreenIds.filter(id => !previousScreenIds.includes(id));
+
+            if (newScreenIds.length > 0) {
+                console.log(`[DISPLAY]: Nuevas pantallas detectadas: ${newScreenIds.join(', ')}`);
+
+                // Restaurar contenido SOLO para las pantallas nuevas
+                const lastState = loadLastState();
+                for (const newId of newScreenIds) {
+                    if (lastState[newId]) {
+                        const screenData = lastState[newId];
+                        console.log(`[DISPLAY]: Restaurando contenido en pantalla ${newId}: ${screenData.url}`);
+                        setTimeout(() => {
+                            handleShowUrl({
+                                action: 'show_url',
+                                screenIndex: newId,
+                                url: screenData.url,
+                                credentials: screenData.credentials || null
+                            });
+                        }, 500);
+                    }
+                }
+            }
+        }
+
         if (socket?.connected) {
             registerDevice();
-            // Restaurar URLs para pantallas nuevas o reconectadas
-            if (reason === 'added') {
-                setTimeout(restoreLastState, 1000);
-            }
         }
     }, CONSTANTS.SCREEN_DEBOUNCE_MS);
 }
