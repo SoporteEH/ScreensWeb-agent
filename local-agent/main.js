@@ -29,6 +29,16 @@ if (require('electron-squirrel-startup')) {
     app.quit();
 }
 
+// INICIO AUTOMÁTICO WINDOWS
+if (app.isPackaged) {
+    app.setLoginItemSettings({
+        openAtLogin: true,
+        path: app.getPath('exe'),
+        args: ['--hidden']
+    });
+    log.info('[STARTUP]: Configurado inicio automático con Windows.');
+}
+
 // CONSTANTES Y CONFIGURACIÓN
 //const SERVER_URL = process.env.SERVER_URL || 'http://192.168.1.137:3000';
 const SERVER_URL = process.env.SERVER_URL || 'http://192.168.1.134:3000';
@@ -69,6 +79,7 @@ let networkWasOffline = false; // Para detectar recuperación de red
 let networkCheckInterval; // Intervalo de monitoreo de red
 let screenChangeTimeout; // Para el debounce de pantallas
 const managedWindows = new Map();
+const identifyWindows = new Map(); // Ventanas de identificación por pantalla
 const retryManager = new Map();
 const hardwareIdToDisplayMap = new Map();
 
@@ -414,12 +425,11 @@ async function startNormalMode() {
 
     setInterval(() => {
         if (managedWindows.size > 0) {
-            console.log('[OPTIMIZATION]: Forzando recolección de basura y limpieza de caché.');
+            console.log('[OPTIMIZATION]: Forzando limpieza de caché y storage.');
             managedWindows.forEach(win => {
                 if (win && !win.isDestroyed()) {
                     win.webContents.session.clearCache().catch(err => console.error('[OPTIMIZATION] Error al limpiar caché:', err));
-                    win.webContents.session.clearStorageData();
-                    win.webContents.collectGarbage();
+                    win.webContents.session.clearStorageData().catch(err => console.error('[OPTIMIZATION] Error al limpiar storage:', err));
                 }
             });
         }
@@ -440,7 +450,6 @@ function restoreLocalContentOffline() {
     console.log('[OFFLINE]: Restaurando contenido local offline...');
 
     for (const [stableId, screenData] of Object.entries(lastState)) {
-        // Solo restaurar contenido local (local:...) sin conexión
         if (screenData.url && screenData.url.startsWith('local:') && hardwareIdToDisplayMap.has(stableId)) {
             console.log(`[OFFLINE]: Restaurando contenido local en pantalla ${stableId}: ${screenData.url}`);
             handleShowUrl({
@@ -1085,6 +1094,17 @@ function handleIdentifyScreen(command) {
     const targetDisplay = hardwareIdToDisplayMap.get(screenIndex);
     if (!targetDisplay) return;
 
+    // Toggle: Si ya existe una ventana de identificación para esta pantalla, cerrarla
+    const existingWin = identifyWindows.get(screenIndex);
+    if (existingWin && !existingWin.isDestroyed()) {
+        console.log(`[IDENTIFY]: Cerrando identificación para pantalla ${screenIndex} (clic manual)`);
+        existingWin.close();
+        identifyWindows.delete(screenIndex);
+        return;
+    }
+
+    // Crear nueva ventana de identificación
+    console.log(`[IDENTIFY]: Abriendo identificación para pantalla ${screenIndex}`);
     const identifyWin = new BrowserWindow({
         x: targetDisplay.bounds.x, y: targetDisplay.bounds.y,
         width: targetDisplay.bounds.width, height: targetDisplay.bounds.height,
@@ -1097,9 +1117,21 @@ function handleIdentifyScreen(command) {
         identifyWin.webContents.send('set-identifier', identifierText);
     });
 
+    // Guardar referencia para poder cerrar con toggle
+    identifyWindows.set(screenIndex, identifyWin);
+
+    // Limpiar referencia cuando se cierre (manual o automático)
+    identifyWin.on('closed', () => {
+        identifyWindows.delete(screenIndex);
+    });
+
+    // Auto-cerrar después de 10 segundos si no se cierra manualmente
     setTimeout(() => {
-        if (identifyWin && !identifyWin.isDestroyed()) identifyWin.close();
-    }, 6000);
+        if (identifyWin && !identifyWin.isDestroyed()) {
+            console.log(`[IDENTIFY]: Auto-cerrando identificación para pantalla ${screenIndex} (10s timeout)`);
+            identifyWin.close();
+        }
+    }, 10000);
 }
 
 function sendHeartbeat() {
