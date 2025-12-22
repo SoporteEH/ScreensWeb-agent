@@ -40,8 +40,8 @@ if (app.isPackaged) {
 }
 
 // CONSTANTES Y CONFIGURACIÓN
-//const SERVER_URL = process.env.SERVER_URL || 'http://192.168.1.137:3000';
-const SERVER_URL = process.env.SERVER_URL || 'http://192.168.1.134:3000';
+const SERVER_URL = process.env.SERVER_URL || 'http://192.168.1.137:3000';
+//const SERVER_URL = process.env.SERVER_URL || 'http://192.168.1.134:3000';
 const CONFIG_DIR = path.join(app.getPath('userData'), 'ScreensWeb');
 const CONFIG_FILE_PATH = path.join(CONFIG_DIR, 'config.json');
 const STATE_FILE_PATH = path.join(CONFIG_DIR, 'state.json');
@@ -403,16 +403,16 @@ async function startNormalMode() {
     // Construye el mapa de pantallas por primera vez ANTES de conectar
     await buildDisplayMap();
 
-    // MEJORA: Restaurar contenido local ANTES de conectar (modo offline)
-    restoreLocalContentOffline();
+    // CRITICO: Restaurar TODO el contenido INMEDIATAMENTE (modo autonomo)
+    // El agente debe funcionar aunque el servidor no este disponible
+    restoreAllContentImmediately();
 
-    // Conectar al servidor
+    // Conectar al servidor (en paralelo, no bloquea la restauracion)
     connectToSocketServer(agentToken);
 
     // Iniciar monitoreo de conectividad de red
     startNetworkMonitoring();
 
-    setTimeout(restoreLastState, 2000);
     // Offset aleatorio para evitar picos en el servidor
     const updateDelay = CONSTANTS.UPDATE_CHECK_MIN_DELAY_MS + Math.random() * (CONSTANTS.UPDATE_CHECK_MAX_DELAY_MS - CONSTANTS.UPDATE_CHECK_MIN_DELAY_MS);
     setTimeout(checkForUpdates, updateDelay);
@@ -437,35 +437,77 @@ async function startNormalMode() {
 }
 
 /**
- * Restaura contenido local sin depender del servidor (modo offline).
- * Se ejecuta al inicio para garantizar que las pantallas muestren contenido inmediatamente.
+ * Restaura TODO el contenido inmediatamente sin depender del servidor.
+ * Se ejecuta al inicio para garantizar que las pantallas muestren contenido
+ * aunque el servidor no esté disponible.
+ * - Si hay internet: carga las URLs normalmente
+ * - Si NO hay internet: muestra fallback para URLs remotas, carga contenido local
  */
-function restoreLocalContentOffline() {
+function restoreAllContentImmediately() {
     const lastState = loadLastState();
     if (Object.keys(lastState).length === 0) {
-        console.log('[OFFLINE]: No hay estado previo para restaurar.');
+        console.log('[STARTUP]: No hay estado previo para restaurar.');
         return;
     }
 
-    console.log('[OFFLINE]: Restaurando contenido local offline...');
+    const hasInternet = net.isOnline();
+    console.log(`[STARTUP]: Restaurando contenido (Internet: ${hasInternet ? 'SI' : 'NO'})...`);
+
+    const fallbackPath = `file://${path.join(__dirname, 'fallback.html')}`;
+    let restoredCount = 0;
 
     for (const [stableId, screenData] of Object.entries(lastState)) {
-        if (screenData.url && screenData.url.startsWith('local:') && hardwareIdToDisplayMap.has(stableId)) {
-            console.log(`[OFFLINE]: Restaurando contenido local en pantalla ${stableId}: ${screenData.url}`);
-            handleShowUrl({
-                action: 'show_url',
-                screenIndex: stableId,
-                url: screenData.url,
-                credentials: null
-            });
+        if (screenData.url && hardwareIdToDisplayMap.has(stableId)) {
+            const isLocalContent = screenData.url.startsWith('local:');
+            const targetDisplay = hardwareIdToDisplayMap.get(stableId);
+
+            if (!hasInternet && !isLocalContent) {
+                // Sin internet y contenido remoto: crear ventana directamente con fallback
+                console.log(`[STARTUP]: Sin internet - creando ventana fallback en pantalla ${stableId}`);
+
+                setTimeout(() => {
+                    // Cerrar ventana existente si hay
+                    const existingWin = managedWindows.get(stableId);
+                    if (existingWin && !existingWin.isDestroyed()) {
+                        existingWin.close();
+                    }
+
+                    // Crear ventana directamente con el fallback (sin pasar por handleShowUrl)
+                    const command = {
+                        action: 'show_url',
+                        screenIndex: stableId,
+                        url: screenData.url,
+                        credentials: screenData.credentials || null
+                    };
+
+                    const win = createContentWindow(targetDisplay, fallbackPath, command);
+                    console.log(`[STARTUP]: Ventana fallback creada en pantalla ${stableId}`);
+                }, 500 * restoredCount);
+            } else {
+                // Con internet o contenido local: cargar normalmente
+                console.log(`[STARTUP]: Restaurando pantalla ${stableId}: ${screenData.url}`);
+
+                setTimeout(() => {
+                    handleShowUrl({
+                        action: 'show_url',
+                        screenIndex: stableId,
+                        url: screenData.url,
+                        credentials: screenData.credentials || null
+                    });
+                }, 500 * restoredCount);
+            }
+
+            restoredCount++;
         }
     }
+
+    console.log(`[STARTUP]: ${restoredCount} pantallas procesadas.`);
 }
 
 /**
  * Inicia el monitoreo periódico de conectividad de red.
  * Detecta pérdida y recuperación de conexión a internet.
- * MEJORA: También fuerza reconexión si la red está online pero el socket está desconectado.
+ * Cuando se recupera la conexión, restaura automáticamente las URLs guardadas.
  */
 function startNetworkMonitoring() {
     if (networkCheckInterval) {
@@ -480,23 +522,54 @@ function startNetworkMonitoring() {
         if (!online && !networkWasOffline) {
             // Acabamos de perder conexión
             networkWasOffline = true;
+            isOnline = false;
             console.log('[NETWORK]: Detectada perdida de conexion a internet.');
+
+            // Mostrar fallback en todas las ventanas con contenido remoto
+            showFallbackOnRemoteWindows();
+
         } else if (online && networkWasOffline) {
             // Acabamos de recuperar conexión
-            console.log('[NETWORK]: Conexion a internet restaurada. Intentando reconectar...');
+            console.log('[NETWORK]: Conexion a internet restaurada!');
             networkWasOffline = false;
+            isOnline = true;
 
-            // Forzar reconexión del socket si no está conectado
+            // Forzar reconexión del socket
             if (socket && !socket.connected) {
                 console.log('[NETWORK]: Forzando reconexion del socket...');
                 socket.connect();
             }
+
+            // CRITICO: Restaurar todas las URLs guardadas
+            console.log('[NETWORK]: Restaurando contenido guardado...');
+            restoreAllContentImmediately();
+
         } else if (online && socket && !socket.connected) {
-            // MEJORA: Red online pero socket desconectado (servidor reiniciado)
+            // Red online pero socket desconectado (servidor reiniciado)
             console.log('[NETWORK]: Red online pero socket desconectado. Forzando reconexion...');
             socket.connect();
         }
     }, CONSTANTS.NETWORK_CHECK_INTERVAL_MS);
+}
+
+/**
+ * Muestra la página de fallback en todas las ventanas que tienen contenido remoto.
+ * Se usa cuando se pierde la conexión a internet.
+ */
+function showFallbackOnRemoteWindows() {
+    const fallbackPath = `file://${path.join(__dirname, 'fallback.html')}`;
+    const lastState = loadLastState();
+
+    for (const [screenId, win] of managedWindows.entries()) {
+        if (win && !win.isDestroyed()) {
+            const screenData = lastState[screenId];
+            // Solo mostrar fallback si es contenido remoto (no local:)
+            if (screenData && screenData.url && !screenData.url.startsWith('local:')) {
+                console.log(`[NETWORK]: Mostrando fallback en pantalla ${screenId} (sin internet)`);
+                win.loadURL(fallbackPath);
+            }
+        }
+    }
 }
 
 /**
@@ -751,14 +824,24 @@ function cleanOrphanedState() {
  * Restaura las URLs guardadas en las pantallas correspondientes al iniciar el agente.
  */
 function restoreLastState() {
+    console.log('[STATE]: Iniciando restauracion de estado...');
+    console.log(`[STATE]: Archivo de estado: ${STATE_FILE_PATH}`);
+    console.log(`[STATE]: Pantallas disponibles: ${Array.from(hardwareIdToDisplayMap.keys()).join(', ') || 'ninguna'}`);
+
     // Limpiar entradas huérfanas antes de restaurar
     const lastState = cleanOrphanedState();
-    if (Object.keys(lastState).length === 0) return;
+
+    if (Object.keys(lastState).length === 0) {
+        console.log('[STATE]: No hay estado previo para restaurar (archivo vacio o no existe).');
+        return;
+    }
 
     console.log('[STATE]: Restaurando ultimo estado conocido:', JSON.stringify(lastState, null, 2));
 
+    let restoredCount = 0;
     for (const [stableId, screenData] of Object.entries(lastState)) {
         if (hardwareIdToDisplayMap.has(stableId)) {
+            console.log(`[STATE]: Restaurando pantalla ${stableId} con URL: ${screenData.url}`);
             const command = {
                 action: 'show_url',
                 screenIndex: stableId,
@@ -769,9 +852,14 @@ function restoreLastState() {
             // Pequeño retraso entre restauraciones para evitar sobrecarga
             setTimeout(() => {
                 handleShowUrl(command);
-            }, 500);
+            }, 500 * restoredCount);
+            restoredCount++;
+        } else {
+            console.log(`[STATE]: Pantalla ${stableId} no encontrada en el mapa de displays, saltando.`);
         }
     }
+
+    console.log(`[STATE]: Restauracion completada. ${restoredCount} pantallas restauradas.`);
 }
 
 /**
@@ -782,6 +870,12 @@ function restoreLastState() {
 
 function sendCommandFeedback(command, status, message) {
     if (!command || !command.commandId) {
+        return;
+    }
+
+    // Si el comando tiene flag silent, no enviar feedback (ej: cierre masivo por desactivación)
+    if (command.silent) {
+        console.log(`[FEEDBACK]: Omitiendo feedback para command silencioso ${command.commandId}`);
         return;
     }
 
