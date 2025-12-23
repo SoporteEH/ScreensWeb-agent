@@ -1,3 +1,16 @@
+/**
+ * ScreensWeb Local Agent - Main Process
+ * 
+ * Agente Electron para gestión remota de pantallas digitales.
+ * 
+ * - Conexión WebSocket resiliente con reconexión automática
+ * - Gestión multi-pantalla con IDs estables por posición
+ * - Restauración automática de contenido (online/offline)
+ * - Auto-actualización via electron-updater
+ * - Sincronización de activos locales
+ * - Modo vinculación (provisioning) para nuevos dispositivos
+ */
+
 const { app, BrowserWindow, screen, net } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
@@ -82,8 +95,9 @@ const managedWindows = new Map();
 const identifyWindows = new Map(); // Ventanas de identificación por pantalla
 const retryManager = new Map();
 const hardwareIdToDisplayMap = new Map();
+const autoRefreshTimers = new Map(); // Timers de auto-refresh por pantalla
 
-// FUNCIONES CONFIGURACIÓN Y AUTENTICACIÓN
+// CONFIGURACIÓN Y AUTENTICACIÓN
 
 /**
  * Carga la configuración del agente desde un archivo JSON.
@@ -180,7 +194,9 @@ function startTokenRefreshLoop() {
     }, 4 * 60 * 60 * 1000); // 4 horas
 }
 
-// LÓGICA DEL ACTUALIZADOR AUTOMÁTICO
+// ============================================================================
+// AUTO-UPDATER - Actualización automática del agente
+// ============================================================================
 
 // Configuración del autoUpdater
 autoUpdater.logger = log;
@@ -190,7 +206,6 @@ autoUpdater.logger.transports.file.level = 'info';
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
 
-// evita problemas comunes
 // - Permite downgrade para forzar actualizaciones completas
 // - Desactiva actualizaciones pre-release a menos que sea necesario
 autoUpdater.allowDowngrade = true;
@@ -260,10 +275,13 @@ const checkForUpdates = () => {
     });
 };
 
-// MODO VINCULACIÓN (PROVISIONING)
+// ============================================================================
+// MODO VINCULACIÓN (PROVISIONING) - Primera configuración del dispositivo
+// ============================================================================
 
 /**
- * Inicia el agente en modo vinculación cuando no hay configuración previa.
+ * Inicia el agente en modo vinculación para dispositivos sin configurar.
+ * Muestra UI de vinculación y espera código PIN del administrador.
  */
 function startProvisioningMode() {
     deviceId = machineIdSync();
@@ -329,9 +347,15 @@ function startProvisioningMode() {
     });
 }
 
-// MODO NORMAL
+// ============================================================================
+// MODO NORMAL - Operación principal del agente
+// ============================================================================
 
-// Manejador Debounced para cambios de pantalla
+/**
+ * Manejador debounced para cambios de pantalla (conexión/desconexión de monitores).
+ * Espera estabilización antes de actualizar el mapa y restaurar contenido.
+ * @param {string} reason - Razón del cambio: 'added', 'removed', 'metrics-changed'
+ */
 function onScreenChange(reason) {
     if (screenChangeTimeout) clearTimeout(screenChangeTimeout);
 
@@ -392,6 +416,10 @@ function onScreenChange(reason) {
     }, CONSTANTS.SCREEN_DEBOUNCE_MS);
 }
 
+/**
+ * Inicializa el agente en modo operativo normal.
+ * Carga configuración, construye mapa de pantallas, restaura contenido y conecta al servidor.
+ */
 async function startNormalMode() {
     const config = loadConfig();
     deviceId = config.deviceId;
@@ -403,14 +431,13 @@ async function startNormalMode() {
     // Construye el mapa de pantallas por primera vez ANTES de conectar
     await buildDisplayMap();
 
-    // CRITICO: Restaurar TODO el contenido INMEDIATAMENTE (modo autonomo)
-    // El agente debe funcionar aunque el servidor no este disponible
+    // El agente funciona aunque el servidor no este disponible
     restoreAllContentImmediately();
 
-    // Conectar al servidor (en paralelo, no bloquea la restauracion)
+    // Conecta al servidor (en paralelo, no bloquea la restauracion)
     connectToSocketServer(agentToken);
 
-    // Iniciar monitoreo de conectividad de red
+    // Inicia monitoreo de conectividad de red
     startNetworkMonitoring();
 
     // Offset aleatorio para evitar picos en el servidor
@@ -477,7 +504,8 @@ function restoreAllContentImmediately() {
                         action: 'show_url',
                         screenIndex: stableId,
                         url: screenData.url,
-                        credentials: screenData.credentials || null
+                        credentials: screenData.credentials || null,
+                        refreshInterval: screenData.refreshInterval || 0
                     };
 
                     const win = createContentWindow(targetDisplay, fallbackPath, command);
@@ -485,14 +513,15 @@ function restoreAllContentImmediately() {
                 }, 500 * restoredCount);
             } else {
                 // Con internet o contenido local: cargar normalmente
-                console.log(`[STARTUP]: Restaurando pantalla ${stableId}: ${screenData.url}`);
+                console.log(`[STARTUP]: Restaurando pantalla ${stableId}: ${screenData.url}${screenData.refreshInterval ? ` (auto-refresh: ${screenData.refreshInterval}min)` : ''}`);
 
                 setTimeout(() => {
                     handleShowUrl({
                         action: 'show_url',
                         screenIndex: stableId,
                         url: screenData.url,
-                        credentials: screenData.credentials || null
+                        credentials: screenData.credentials || null,
+                        refreshInterval: screenData.refreshInterval || 0
                     });
                 }, 500 * restoredCount);
             }
@@ -573,9 +602,9 @@ function showFallbackOnRemoteWindows() {
 }
 
 /**
- * Establece la conexión con el servidor de WebSocket y configura los listeners de eventos.
- * Incluye reconexión infinita y manejo completo de eventos para máxima resiliencia.
- * @param {string} token - El JWT del agente para la autenticación.
+ * Establece conexión WebSocket con el servidor central.
+ * Configura reconexión automática infinita y handlers para todos los eventos críticos.
+ * @param {string} token - JWT del agente para autenticación
  */
 function connectToSocketServer(token) {
     socket = io(SERVER_URL, {
@@ -599,12 +628,12 @@ function connectToSocketServer(token) {
         isOnline = false;
         console.log(`[SOCKET]: Desconectado del servidor. Razon: ${reason}`);
 
-        // Si el servidor forzó la desconexión, reconectar manualmente
+        // Si el servidor forzó la desconexión, reconecta manualmente
         if (reason === 'io server disconnect') {
             console.log('[SOCKET]: El servidor cerro la conexion. Reconectando manualmente...');
             socket.connect();
         }
-        // Para otras razones (transport close, ping timeout, etc.), socket.io reconectará automáticamente
+        // Para transport close, ping timeout, etc.), socket.io reconecta automáticamente
     });
 
     socket.on('reconnect', (attemptNumber) => {
@@ -634,6 +663,7 @@ function connectToSocketServer(token) {
         if (command.action === 'show_url') handleShowUrl(command);
         if (command.action === 'close_screen') handleCloseScreen(command);
         if (command.action === 'identify_screen') handleIdentifyScreen(command);
+        if (command.action === 'refresh_screen') handleRefreshScreen(command);
         if (command.action === 'reboot_device') handleRebootDevice();
         if (command.action === 'force_update') handleForceUpdate();
     });
@@ -644,6 +674,10 @@ function connectToSocketServer(token) {
     });
 }
 
+/**
+ * Ejecuta reinicio del sistema operativo host.
+ * Soporta Windows, macOS y Linux.
+ */
 function handleRebootDevice() {
     let command = '';
     const platform = process.platform;
@@ -654,7 +688,6 @@ function handleRebootDevice() {
     } else if (platform === 'darwin' || platform === 'linux') {
         command = 'shutdown -r now';
     } else {
-        // Si el sistema operativo no es compatible, se registra un error y se detiene.
         console.error(`[COMMAND-REBOOT]: Reboot command is not supported on platform: ${platform}`);
         return;
     }
@@ -672,8 +705,11 @@ function handleRebootDevice() {
     });
 }
 
+/**
+ * Fuerza búsqueda inmediata de actualizaciones del agente.
+ * Incluye cooldown de 3 minutos para evitar spam de requests.
+ */
 function handleForceUpdate() {
-    // VERIFICA SI HAY UNA BUSQUEDA EN CURSO.
     if (isCheckingForUpdate) {
         console.log('[COMMAND-UPDATE]: Ignorando comando "force_update": ya hay una busqueda de actualizacion en curso.');
         return;
@@ -720,11 +756,11 @@ async function buildDisplayMap() {
     hardwareIdToDisplayMap.clear();
     const displays = screen.getAllDisplays();
 
-    // Ordenar pantallas por posición X (izquierda a derecha)
+    // Ordena pantallas por posición X (izquierda a derecha)
     displays.sort((a, b) => a.bounds.x - b.bounds.x);
 
     displays.forEach((display, index) => {
-        const simpleId = String(index + 1); // "1", "2", "3"...
+        const simpleId = String(index + 1);
         hardwareIdToDisplayMap.set(simpleId, display);
     });
 
@@ -734,29 +770,69 @@ async function buildDisplayMap() {
 
 /**
  * Guarda el estado actual de una pantalla en el archivo de estado.
- * @param {string} screenIndex - El ID simple de la pantalla ("1", "2", etc.)
+ * @param {string} screenIndex - El ID simple de la pantalla
  * @param {string|null} url - La URL a guardar o null para eliminar
  * @param {object|null} credentials - Credenciales para autenticación automática
+ * @param {number} refreshInterval - Intervalo de auto-refresh en minutos (0 = desactivado)
  */
-function saveCurrentState(screenIndex, url, credentials = null) {
+function saveCurrentState(screenIndex, url, credentials = null, refreshInterval = 0) {
     let state = loadLastState();
+
+    // Limpiar timer anterior si existe
+    if (autoRefreshTimers.has(screenIndex)) {
+        clearInterval(autoRefreshTimers.get(screenIndex));
+        autoRefreshTimers.delete(screenIndex);
+        console.log(`[AUTO-REFRESH]: Timer limpiado para pantalla ${screenIndex}`);
+    }
 
     if (url) {
         state[screenIndex] = {
             url: url,
             credentials: credentials || null,
+            refreshInterval: refreshInterval || 0,
             timestamp: new Date().toISOString()
         };
+
+        // Configurar nuevo timer de auto-refresh si está habilitado
+        if (refreshInterval > 0) {
+            setupAutoRefresh(screenIndex, refreshInterval);
+        }
     } else {
         delete state[screenIndex];
     }
 
     try {
         fs.writeFileSync(STATE_FILE_PATH, JSON.stringify(state, null, 2));
-        console.log(`[STATE]: Estado guardado para pantalla ${screenIndex}: ${url || '(vacío)'}`);
+        console.log(`[STATE]: Estado guardado para pantalla ${screenIndex}: ${url || '(vacío)'}${refreshInterval ? ` (auto-refresh: ${refreshInterval}min)` : ''}`);
     } catch (error) {
         console.error('[STATE]: Error al guardar estado:', error);
     }
+}
+
+/**
+ * Configura un timer de auto-refresh para una pantalla específica.
+ * @param {string} screenIndex - ID de la pantalla
+ * @param {number} intervalMinutes - Intervalo en minutos
+ */
+function setupAutoRefresh(screenIndex, intervalMinutes) {
+    const intervalMs = intervalMinutes * 60 * 1000;
+
+    console.log(`[AUTO-REFRESH]: Configurando auto-refresh cada ${intervalMinutes} minutos para pantalla ${screenIndex}`);
+
+    const timerId = setInterval(() => {
+        const win = managedWindows.get(screenIndex);
+        if (win && !win.isDestroyed()) {
+            console.log(`[AUTO-REFRESH]: Recargando pantalla ${screenIndex} (programado cada ${intervalMinutes}min)`);
+            win.webContents.reload();
+        } else {
+            // Si la ventana ya no existe, limpiar el timer
+            console.log(`[AUTO-REFRESH]: Ventana ${screenIndex} no existe, limpiando timer`);
+            clearInterval(timerId);
+            autoRefreshTimers.delete(screenIndex);
+        }
+    }, intervalMs);
+
+    autoRefreshTimers.set(screenIndex, timerId);
 }
 
 /**
@@ -778,11 +854,9 @@ function loadLastState() {
                         timestamp: new Date().toISOString()
                     };
                 } else {
-                    // Ya está en el nuevo formato
                     migratedState[key] = value;
                 }
             }
-            // Si hubo migración, guardar el estado actualizado
             if (JSON.stringify(state) !== JSON.stringify(migratedState)) {
                 fs.writeFileSync(STATE_FILE_PATH, JSON.stringify(migratedState, null, 2));
             }
@@ -828,7 +902,7 @@ function restoreLastState() {
     console.log(`[STATE]: Archivo de estado: ${STATE_FILE_PATH}`);
     console.log(`[STATE]: Pantallas disponibles: ${Array.from(hardwareIdToDisplayMap.keys()).join(', ') || 'ninguna'}`);
 
-    // Limpiar entradas huérfanas antes de restaurar
+    // Limpia entradas huérfanas antes de restaurar
     const lastState = cleanOrphanedState();
 
     if (Object.keys(lastState).length === 0) {
@@ -841,15 +915,16 @@ function restoreLastState() {
     let restoredCount = 0;
     for (const [stableId, screenData] of Object.entries(lastState)) {
         if (hardwareIdToDisplayMap.has(stableId)) {
-            console.log(`[STATE]: Restaurando pantalla ${stableId} con URL: ${screenData.url}`);
+            console.log(`[STATE]: Restaurando pantalla ${stableId} con URL: ${screenData.url}${screenData.refreshInterval ? ` (auto-refresh: ${screenData.refreshInterval}min)` : ''}`);
             const command = {
                 action: 'show_url',
                 screenIndex: stableId,
                 url: screenData.url,
-                credentials: screenData.credentials || null
+                credentials: screenData.credentials || null,
+                refreshInterval: screenData.refreshInterval || 0
             };
 
-            // Pequeño retraso entre restauraciones para evitar sobrecarga
+            // Retraso entre restauraciones para evitar sobrecarga
             setTimeout(() => {
                 handleShowUrl(command);
             }, 500 * restoredCount);
@@ -868,6 +943,12 @@ function restoreLastState() {
  * Para activos locales, construye la ruta al archivo y la carga usando el protocolo 'file://'.
  */
 
+/**
+ * Envía feedback al servidor sobre el resultado de un comando.
+ * @param {object} command - Comando original con commandId
+ * @param {string} status - 'success' o 'error'
+ * @param {string} message - Mensaje descriptivo del resultado
+ */
 function sendCommandFeedback(command, status, message) {
     if (!command || !command.commandId) {
         return;
@@ -892,6 +973,11 @@ function sendCommandFeedback(command, status, message) {
     }
 }
 
+/**
+ * Programa reintento con backoff exponencial para comandos fallidos.
+ * Máximo 5 intentos: 30s, 1min, 2min, 4min, 8min.
+ * @param {object} command - Comando a reintentar
+ */
 function scheduleRetry(command) {
     const { screenIndex } = command;
 
@@ -1015,7 +1101,7 @@ function createContentWindow(display, urlToLoad, command) {
  */
 
 function handleShowUrl(command, currentAttempt = 0) {
-    const { screenIndex, url, credentials, contentName } = command;
+    const { screenIndex, url, credentials, contentName, refreshInterval } = command;
 
     if (retryManager.has(screenIndex)) {
         clearTimeout(retryManager.get(screenIndex).timerId);
@@ -1029,7 +1115,7 @@ function handleShowUrl(command, currentAttempt = 0) {
         return;
     }
 
-    saveCurrentState(screenIndex, url, credentials);
+    saveCurrentState(screenIndex, url, credentials, refreshInterval || 0);
 
     if (!isOnline && !url.startsWith('local:')) {
         const errorMsg = `Error: Sin conexion. No se puede cargar la URL '${url}'. Se reintentara cuando vuelva la conexion.`;
@@ -1183,6 +1269,37 @@ function handleCloseScreen(command) {
     }
 }
 
+/**
+ * Recarga el contenido de una pantalla especifica
+ * @param {object} command - El objeto del comando con screenIndex.
+ */
+function handleRefreshScreen(command) {
+    const { screenIndex } = command;
+
+    try {
+        const win = managedWindows.get(screenIndex);
+
+        if (!win || win.isDestroyed()) {
+            sendCommandFeedback(command, 'error', `Pantalla ${screenIndex} no tiene contenido activo`);
+            return;
+        }
+
+        console.log(`[REFRESH]: Recargando contenido en pantalla ${screenIndex}`);
+        win.webContents.reload();
+
+        sendCommandFeedback(command, 'success', `Pantalla ${screenIndex} recargada`);
+    } catch (error) {
+        console.error(`[REFRESH]: Error al recargar pantalla ${screenIndex}:`, error);
+        sendCommandFeedback(command, 'error', `Error al recargar pantalla ${screenIndex}: ${error.message}`);
+    }
+}
+
+/**
+ * Muestra/oculta overlay de identificación en una pantalla específica.
+ * Funciona como toggle: si ya existe, la cierra; si no, la crea.
+ * Auto-cierre después de 10 segundos.
+ * @param {object} command - Comando con screenIndex e identifierText
+ */
 function handleIdentifyScreen(command) {
     const { screenIndex, identifierText } = command;
     const targetDisplay = hardwareIdToDisplayMap.get(screenIndex);
@@ -1211,10 +1328,7 @@ function handleIdentifyScreen(command) {
         identifyWin.webContents.send('set-identifier', identifierText);
     });
 
-    // Guardar referencia para poder cerrar con toggle
     identifyWindows.set(screenIndex, identifyWin);
-
-    // Limpiar referencia cuando se cierre (manual o automático)
     identifyWin.on('closed', () => {
         identifyWindows.delete(screenIndex);
     });
@@ -1228,6 +1342,10 @@ function handleIdentifyScreen(command) {
     }, 10000);
 }
 
+/**
+ * Envía latido periódico al servidor con lista de pantallas activas.
+ * Se ejecuta cada 30 segundos para mantener el estado de conexión.
+ */
 function sendHeartbeat() {
     if (!socket || !socket.connected) return;
     const connectedScreenIds = Array.from(hardwareIdToDisplayMap.keys());
@@ -1236,11 +1354,8 @@ function sendHeartbeat() {
 }
 
 /**
- * Realiza el proceso completo de sincronizacion de activos locales.
- * Obtiene la lista de activos asignados desde el servidor.
- * Compara con los archivos existentes en el directorio local.
- * Descarga los archivos faltantes.
- * Elimina los archivos locales que ya no estan asignados.
+ * Sincroniza activos locales con el servidor.
+ * Descarga nuevos archivos, elimina obsoletos y mantiene el directorio actualizado.
  */
 async function syncLocalAssets() {
     if (isSyncing) {
@@ -1321,8 +1436,9 @@ async function syncLocalAssets() {
     }
 }
 
-// CICLO DE VIDA DE LA APP
-
+/**
+ * Decide entre modo vinculación o modo normal según configuración existente.
+ */
 const initialConfig = loadConfig();
 app.whenReady().then(() => {
     if (!initialConfig.deviceId) {
