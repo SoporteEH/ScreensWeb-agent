@@ -1,6 +1,6 @@
 {
   "name": "local-agent",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "description": "ScreensWeb Local Agent",
   "main": "main.js",
   "scripts": {

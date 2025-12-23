@@ -74,19 +74,13 @@ if (hasGpuFailed()) {
     console.log('[GPU]: GPU marcada como fallida anteriormente. Usando renderizado por software.');
     app.disableHardwareAcceleration();
 } else {
-    console.log('[GPU]: Intentando usar aceleración de hardware...');
-    // Habilita aceleración GPU para reducir uso de CPU
+    console.log('[GPU]: Usando aceleración de hardware (modo conservador)...');
+    // Solo habilitamos opciones seguras, sin forzar GPU
     app.commandLine.appendSwitch('enable-gpu-rasterization');
-    app.commandLine.appendSwitch('enable-zero-copy');
-    app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder');
-    // Desactiva el rasterizador por software (fuerza GPU)
-    app.commandLine.appendSwitch('disable-software-rasterizer');
 }
 
 // Optimizaciones comunes (aplican con o sin GPU)
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
-app.commandLine.appendSwitch('disable-background-timer-throttling');
-app.commandLine.appendSwitch('disable-renderer-backgrounding');
 
 // Detectar crash del proceso GPU y marcar para fallback
 app.on('gpu-process-crashed', (event, killed) => {
@@ -1094,8 +1088,6 @@ function createContentWindow(display, urlToLoad, command) {
         frame: false,
         show: false,
         backgroundColor: '#000000',
-        // Optimizaciones de rendimiento
-        paintWhenInitiallyHidden: false,
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -1104,23 +1096,20 @@ function createContentWindow(display, urlToLoad, command) {
             spellcheck: false,
             backgroundThrottling: false,
             devTools: !app.isPackaged,
-            enablePreferredSizeMode: false,
-            plugins: false,
-            images: true,
-            webgl: true,
-            offscreen: false,
         }
     });
 
-    // Optimización: deshabilitar zoom
     win.webContents.setZoomFactor(1);
     win.webContents.setVisualZoomLevelLimits(1, 1);
 
-    win.once('ready-to-show', () => {
-        win.show();
-    });
+    // Mostrar cuando el contenido esté listo
+    win.once('ready-to-show', () => win.show());
 
-    // --- AQUÍ ESTÁ EL CAMBIO ---
+    // Emergencia: si ready-to-show no se dispara en 2s, forzar visualización
+    setTimeout(() => {
+        if (!win.isDestroyed() && !win.isVisible()) win.show();
+    }, 2000);
+
     win.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
         console.error(`[RESILIENCE]: Fallo al cargar URL '${validatedURL}'. Razón: ${errorDescription}`);
 
@@ -1132,13 +1121,8 @@ function createContentWindow(display, urlToLoad, command) {
 
         // Si hay un commandId, enviamos feedback al servidor
         if (command.commandId) {
-            // LÓGICA DE VISUALIZACIÓN:
-            // Si tenemos 'contentName' (ej: "test fallback"), lo usamos.
-            // Si no, usamos la URL original.
             const displayName = contentName ? `'${contentName}'` : `la URL '${originalUrl}'`;
-
             const errorMsg = `Fallo al cargar ${displayName}. Razón: ${errorDescription}`;
-
             sendCommandFeedback(command, 'error', errorMsg);
         }
 
@@ -1154,7 +1138,6 @@ function createContentWindow(display, urlToLoad, command) {
 
         win.loadURL(fallbackPath);
     });
-    // ---------------------------
 
     win.on('closed', () => {
         managedWindows.delete(screenIndex);
@@ -1384,7 +1367,7 @@ function handleIdentifyScreen(command) {
     const existingWin = identifyWindows.get(screenIndex);
     if (existingWin && !existingWin.isDestroyed()) {
         console.log(`[IDENTIFY]: Cerrando identificación para pantalla ${screenIndex} (clic manual)`);
-        existingWin.close();
+        existingWin.destroy(); // destroy para limpiar proceso
         identifyWindows.delete(screenIndex);
         return;
     }
@@ -1412,7 +1395,7 @@ function handleIdentifyScreen(command) {
     setTimeout(() => {
         if (identifyWin && !identifyWin.isDestroyed()) {
             console.log(`[IDENTIFY]: Auto-cerrando identificación para pantalla ${screenIndex} (10s timeout)`);
-            identifyWin.close();
+            identifyWin.destroy(); // destroy() en lugar de close() para limpiar proceso
         }
     }, 10000);
 }
