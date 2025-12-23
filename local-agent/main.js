@@ -79,8 +79,14 @@ if (hasGpuFailed()) {
     app.commandLine.appendSwitch('enable-gpu-rasterization');
 }
 
-// Optimizaciones comunes (aplican con o sin GPU)
+// Optimizaciones de memoria
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
+app.commandLine.appendSwitch('disk-cache-size', '10485760'); // 10MB
+app.commandLine.appendSwitch('media-cache-size', '10485760'); // 10MB
+app.commandLine.appendSwitch('disable-extensions');
+app.commandLine.appendSwitch('disable-sync');
+app.commandLine.appendSwitch('disable-translate');
+app.commandLine.appendSwitch('disable-background-networking');
 
 // Detectar crash del proceso GPU y marcar para fallback
 app.on('gpu-process-crashed', (event, killed) => {
@@ -153,7 +159,16 @@ const managedWindows = new Map();
 const identifyWindows = new Map(); // Ventanas de identificación por pantalla
 const retryManager = new Map();
 const hardwareIdToDisplayMap = new Map();
-const autoRefreshTimers = new Map(); // Timers de auto-refresh por pantalla
+const autoRefreshTimers = new Map();
+
+// Limpieza periódica de caché (cada 30 min)
+setInterval(() => {
+    managedWindows.forEach((win, screenId) => {
+        if (!win.isDestroyed() && win.webContents && win.webContents.session) {
+            win.webContents.session.clearCache().catch(() => { });
+        }
+    });
+}, 30 * 60 * 1000);
 
 // CONFIGURACIÓN Y AUTENTICACIÓN
 
@@ -1089,6 +1104,7 @@ function createContentWindow(display, urlToLoad, command) {
         show: false,
         backgroundColor: '#000000',
         webPreferences: {
+            partition: `persist:screen-${screenIndex}`,
             nodeIntegration: false,
             contextIsolation: true,
             webSecurity: false,
@@ -1144,6 +1160,11 @@ function createContentWindow(display, urlToLoad, command) {
         if (retryManager.has(screenIndex)) {
             clearTimeout(retryManager.get(screenIndex).timerId);
             retryManager.delete(screenIndex);
+        }
+        // Limpiar caché de la sesión para liberar memoria
+        if (win.webContents && win.webContents.session) {
+            win.webContents.session.clearCache().catch(() => { });
+            win.webContents.session.clearStorageData().catch(() => { });
         }
     });
 
