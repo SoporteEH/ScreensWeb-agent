@@ -36,7 +36,71 @@ if (!gotTheLock) {
     });
 }
 
-app.disableHardwareAcceleration();
+// OPTIMIZACIÓN DE RENDIMIENTO CON DETECCIÓN AUTOMÁTICA DE GPU
+const GPU_CONFIG_FILE = path.join(app.getPath('userData'), 'gpu-config.json');
+
+// Verifica si la GPU falló anteriormente
+function hasGpuFailed() {
+    try {
+        if (fs.existsSync(GPU_CONFIG_FILE)) {
+            const config = JSON.parse(fs.readFileSync(GPU_CONFIG_FILE, 'utf8'));
+            return config.gpuFailed === true;
+        }
+    } catch (e) { /* Ignora errores de lectura */ }
+    return false;
+}
+
+// Marca la GPU como fallida para futuros inicios
+function markGpuAsFailed() {
+    try {
+        fs.writeFileSync(GPU_CONFIG_FILE, JSON.stringify({ gpuFailed: true, failedAt: new Date().toISOString() }));
+        console.log('[GPU]: Marcada como fallida. Próximo inicio usará renderizado por software.');
+    } catch (e) {
+        console.error('[GPU]: Error guardando estado:', e);
+    }
+}
+
+// Resetea el estado de GPU (para pruebas o después de actualizar drivers)
+function resetGpuState() {
+    try {
+        if (fs.existsSync(GPU_CONFIG_FILE)) {
+            fs.unlinkSync(GPU_CONFIG_FILE);
+        }
+    } catch (e) { /* Ignorar */ }
+}
+
+// Configurar GPU según disponibilidad
+if (hasGpuFailed()) {
+    console.log('[GPU]: GPU marcada como fallida anteriormente. Usando renderizado por software.');
+    app.disableHardwareAcceleration();
+} else {
+    console.log('[GPU]: Intentando usar aceleración de hardware...');
+    // Habilita aceleración GPU para reducir uso de CPU
+    app.commandLine.appendSwitch('enable-gpu-rasterization');
+    app.commandLine.appendSwitch('enable-zero-copy');
+    app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder');
+    // Desactiva el rasterizador por software (fuerza GPU)
+    app.commandLine.appendSwitch('disable-software-rasterizer');
+}
+
+// Optimizaciones comunes (aplican con o sin GPU)
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+
+// Detectar crash del proceso GPU y marcar para fallback
+app.on('gpu-process-crashed', (event, killed) => {
+    console.error(`[GPU]: Proceso GPU crasheó (killed: ${killed}). Marcando para fallback.`);
+    markGpuAsFailed();
+});
+
+// Detectar fallos en el proceso de renderizado (puede indicar problema de GPU)
+app.on('render-process-gone', (event, webContents, details) => {
+    if (details.reason === 'crashed' || details.reason === 'gpu-dead') {
+        console.error(`[GPU]: Proceso de renderizado falló (razón: ${details.reason}). Marcando GPU como fallida.`);
+        markGpuAsFailed();
+    }
+});
 
 if (require('electron-squirrel-startup')) {
     app.quit();
@@ -1030,6 +1094,8 @@ function createContentWindow(display, urlToLoad, command) {
         frame: false,
         show: false,
         backgroundColor: '#000000',
+        // Optimizaciones de rendimiento
+        paintWhenInitiallyHidden: false,
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -1038,8 +1104,17 @@ function createContentWindow(display, urlToLoad, command) {
             spellcheck: false,
             backgroundThrottling: false,
             devTools: !app.isPackaged,
+            enablePreferredSizeMode: false,
+            plugins: false,
+            images: true,
+            webgl: true,
+            offscreen: false,
         }
     });
+
+    // Optimización: deshabilitar zoom
+    win.webContents.setZoomFactor(1);
+    win.webContents.setVisualZoomLevelLimits(1, 1);
 
     win.once('ready-to-show', () => {
         win.show();
