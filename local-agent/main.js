@@ -1104,7 +1104,6 @@ function createContentWindow(display, urlToLoad, command) {
         show: false,
         backgroundColor: '#000000',
         webPreferences: {
-            partition: `persist:screen-${screenIndex}`,
             nodeIntegration: false,
             contextIsolation: true,
             webSecurity: false,
