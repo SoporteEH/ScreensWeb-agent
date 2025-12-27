@@ -6,7 +6,7 @@
  * - Conexión WebSocket resiliente con reconexión automática
  * - Gestión multi-pantalla con IDs estables por posición
  * - Restauración automática de contenido (online/offline)
- * - Auto-actualización via electron-updater
+ * - Actualización via electron-updater
  * - Sincronización de activos locales
  * - Modo vinculación (provisioning) para nuevos dispositivos
  */
@@ -69,13 +69,13 @@ function resetGpuState() {
     } catch (e) { /* Ignorar */ }
 }
 
-// Configurar GPU según disponibilidad
+// Configura GPU según disponibilidad
 if (hasGpuFailed()) {
     console.log('[GPU]: GPU marcada como fallida anteriormente. Usando renderizado por software.');
     app.disableHardwareAcceleration();
 } else {
     console.log('[GPU]: Usando aceleración de hardware (modo conservador)...');
-    // Solo habilitamos opciones seguras, sin forzar GPU
+    // Solo habilita opciones seguras
     app.commandLine.appendSwitch('enable-gpu-rasterization');
 }
 
@@ -88,13 +88,13 @@ app.commandLine.appendSwitch('disable-sync');
 app.commandLine.appendSwitch('disable-translate');
 app.commandLine.appendSwitch('disable-background-networking');
 
-// Detectar crash del proceso GPU y marcar para fallback
+// Detecta crash del proceso GPU y marcar para fallback
 app.on('gpu-process-crashed', (event, killed) => {
     console.error(`[GPU]: Proceso GPU crasheó (killed: ${killed}). Marcando para fallback.`);
     markGpuAsFailed();
 });
 
-// Detectar fallos en el proceso de renderizado (puede indicar problema de GPU)
+// Detecta fallos en el proceso de renderizado
 app.on('render-process-gone', (event, webContents, details) => {
     if (details.reason === 'crashed' || details.reason === 'gpu-dead') {
         console.error(`[GPU]: Proceso de renderizado falló (razón: ${details.reason}). Marcando GPU como fallida.`);
@@ -1057,7 +1057,7 @@ function scheduleRetry(command) {
     // Obtener el intento actual o empezar desde 0
     let attempt = (retryManager.get(screenIndex)?.attempt || 0) + 1;
 
-    // No reintentar más de 5 veces para evitar bucles infinitos
+    // MAX 5 reintentos / evita bucles infinitos
     const MAX_ATTEMPTS = 5;
     if (attempt > MAX_ATTEMPTS) {
         console.log(`[RETRY]: Se alcanzo el maximo de ${MAX_ATTEMPTS} reintentos para la pantalla ${screenIndex}. Abortando.`);
@@ -1154,16 +1154,18 @@ function createContentWindow(display, urlToLoad, command) {
         win.loadURL(fallbackPath);
     });
 
+    // Guarda referencia de sesión ANTES de que la ventana se destruya
+    const windowSession = win.webContents.session;
+
     win.on('closed', () => {
         managedWindows.delete(screenIndex);
         if (retryManager.has(screenIndex)) {
             clearTimeout(retryManager.get(screenIndex).timerId);
             retryManager.delete(screenIndex);
         }
-        // Limpiar caché de la sesión para liberar memoria
-        if (win.webContents && win.webContents.session) {
-            win.webContents.session.clearCache().catch(() => { });
-            win.webContents.session.clearStorageData().catch(() => { });
+        if (windowSession) {
+            windowSession.clearCache().catch(() => { });
+            windowSession.clearStorageData().catch(() => { });
         }
     });
 
