@@ -90,6 +90,15 @@ function checkForUpdates() {
         log.error('[UPDATER]: Error al buscar actualizaciones:', error);
         isCheckingForUpdate = false;
     });
+
+    // RE-INTENTO PERIODICO
+    // Si la app está rota y no hay red al inicio, esto lo intentará cada 15 min.
+    setInterval(() => {
+        if (!isCheckingForUpdate) {
+            log.info('[UPDATER]: Re-intento periódico de búsqueda de actualización...');
+            autoUpdater.checkForUpdates().catch(() => { });
+        }
+    }, 15 * 60 * 1000);
 }
 
 /**
