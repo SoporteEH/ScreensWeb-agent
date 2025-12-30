@@ -1,14 +1,8 @@
-# =========================================
-# Archivos de Dependencias
-# =========================================
-
+# Dependencias
 node_modules/
 
-# =========================================
-# Archivos de Construcción y Empaquetado de Electron
-# =========================================
+# Construcción y Empaquetado de Electron
 
-# Carpetas de salida de electron-builder
 dist/
 release/
 out/
@@ -20,29 +14,21 @@ build/
 *.rpm
 *.snap
 
-# =========================================
-# Archivos Sensibles y de Configuración Local
-# =========================================
-
+# Archivos Sensibles / Configuración Local
 luckia-config.json
 config.json
 
-# =========================================
 # Archivos de log
-# =========================================
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# =========================================
-# Archivos del Sistema Operativo
-# =========================================
+# Archivos Sistema Operativo
 .DS_Store
 Thumbs.db
 
-# =========================================
-# Archivos del Editor/IDE
-# =========================================
+# Archivos IDE
 .idea/
 .vscode/
+*.txt
