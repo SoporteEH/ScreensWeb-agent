@@ -88,9 +88,7 @@ configureGpu();
 configureMemory();
 registerGpuCrashHandlers();
 
-if (require('electron-squirrel-startup')) {
-    app.quit();
-}
+// El arranque de Squirrel se ha eliminado para usar NSIS de forma nativa.
 
 // INICIO AUTOMÁTICO WINDOWS
 if (app.isPackaged) {

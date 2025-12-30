@@ -1,6 +1,6 @@
 {
   "name": "local-agent",
-  "version": "1.0.25",
+  "version": "1.0.26",
   "description": "ScreensWeb Local Agent",
   "main": "main.js",
   "scripts": {
@@ -29,10 +29,16 @@
     "compression": "maximum",
     "files": [
       "main.js",
+      "config/**/*",
       "services/**/*",
       "handlers/**/*",
+      "utils/**/*",
       "icons/**/*",
-      "package.json"
+      "*.html",
+      "preload.js",
+      "identify-preload.js",
+      "package.json",
+      "!mainOld.js"
     ],
     "win": {
       "target": [
