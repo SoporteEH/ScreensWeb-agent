@@ -6,7 +6,7 @@
 
 const { BrowserWindow, app } = require('electron');
 const path = require('path');
-const fetch = require('node-fetch');
+// Usamos el fetch nativo global de Node/Electron
 const { io } = require('socket.io-client');
 const log = require('electron-log');
 const { SERVER_URL } = require('../config/constants');

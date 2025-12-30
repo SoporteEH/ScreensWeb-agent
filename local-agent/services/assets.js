@@ -6,7 +6,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const fetch = require('node-fetch');
+// Usamos el fetch nativo global de Node/Electron
+const { Readable } = require('stream'); // Necesario para manejar streams de descarga con el nuevo fetch
 const log = require('electron-log');
 const { SYNC_API_URL, CONTENT_DIR, SERVER_URL } = require('../config/constants');
 
@@ -62,9 +63,9 @@ async function syncLocalAssets(agentToken) {
 
                 const fileStream = fs.createWriteStream(destinationPath);
                 await new Promise((resolve, reject) => {
-                    downloadResponse.body.pipe(fileStream);
-                    downloadResponse.body.on('error', reject);
+                    Readable.fromWeb(downloadResponse.body).pipe(fileStream);
                     fileStream.on('finish', resolve);
+                    fileStream.on('error', reject);
                 });
                 log.info(`[SYNC]: Descarga completa: ${assetToDownload.originalFilename}`);
             } catch (err) {

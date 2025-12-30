@@ -4,7 +4,7 @@
  * Gestiona el refresco del token JWT y el bucle de verificación.
  */
 
-const fetch = require('node-fetch');
+// Usamos el fetch nativo global de Node/Electron
 const { jwtDecode } = require('jwt-decode');
 const log = require('electron-log');
 const { AGENT_REFRESH_URL } = require('../config/constants');
