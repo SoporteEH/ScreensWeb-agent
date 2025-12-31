@@ -189,25 +189,49 @@ Todo el proceso es en segundo plano.
 
 ## 📁 Estructura del Proyecto
 
-*(Ejemplo, ajusta a tu estructura real)*
-
 ```txt
 screensWeb-agent/
 ├── .github/
 │   └── workflows/
 │       └── release-agent.yml          # Workflow CI/CD para actualización
-├── build                              # Iconos
-├── local-agent/
-    ├── .gitignore
-    ├── fallback.html                  # Fallback offline
-    ├── identify.html                  # Identificar la pantalla
-    ├── identify-preload.js            # Preload JS para identify.html
-    ├── main.js                        # Proceso principal de Electron
-    ├── package.json                   # Metadata del proyecto y configuración Electron
-    ├── preload.js                     # Preload general para ventanas de Electron
+├── build/                             # Iconos para el instalador
+└── local-agent/
+    ├── config/
+    │   └── constants.js               # Configuración centralizada (URLs, timeouts, rutas)
+    ├── handlers/
+    │   ├── commands.js                # Handlers de comandos (show_url, close_screen, etc.)
+    │   └── provisioning.js            # Flujo de vinculación inicial
+    ├── services/
+    │   ├── assets.js                  # Sincronización de activos locales
+    │   ├── auth.js                    # Refresh de tokens JWT
+    │   ├── device.js                  # Registro de dispositivo y reboot
+    │   ├── gpu.js                     # Configuración de GPU y memoria
+    │   ├── network.js                 # Monitoreo de conectividad
+    │   ├── socket.js                  # Conexión WebSocket con handlers delegados
+    │   ├── state.js                   # Persistencia de URLs y auto-refresh
+    │   └── updater.js                 # Auto-actualización via electron-updater
+    ├── utils/
+    │   └── configManager.js           # Gestión de config.json
+    ├── icons/                         # Iconos de la aplicación
+    ├── main.js                        # Proceso principal (orquestador)
+    ├── fallback.html                  # Página de fallback offline
+    ├── identify.html                  # Ventana de identificación de pantalla
+    ├── identify-preload.js            # Preload para identify.html
     ├── provision.html                 # Modo de vinculación inicial
-    └── README.md                      
+    ├── preload.js                     # Preload general
+    ├── package.json                   # Metadata y configuración Electron
+    └── README.md
 ```
+
+### Arquitectura Modular
+
+| Capa | Descripción |
+|------|-------------|
+| **main.js** | Orquestador que inicializa servicios y coordina eventos |
+| **services/** | Módulos independientes con responsabilidad única |
+| **handlers/** | Ejecutores de comandos remotos y flujos de usuario |
+| **config/** | Constantes, rutas y configuración centralizada |
+| **utils/** | Utilidades reutilizables |
 
 ---
 
