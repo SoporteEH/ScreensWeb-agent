@@ -40,10 +40,11 @@ jobs:
 
       # Compilar aplicación y crea el .exe
       - name: Build application
-        run: npm run build
+        run: npm run build:prod
         working-directory: ./local-agent
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SERVER_URL: ${{ secrets.SERVER_URL }}
 
       # Crea Release en GitHub
       - name: Create GitHub Release

@@ -1,881 +1,559 @@
-const { app, BrowserWindow, screen } = require('electron');
-const { autoUpdater } = require('electron-updater');
-const { machineIdSync } = require('node-machine-id');
-const { io } = require('socket.io-client');
+/**
+ * ScreensWeb Local Agent - Main Process
+ * 
+ * - Conexión WebSocket resiliente con reconexión automática
+ * - Gestión multi-pantalla con IDs estables por posición
+ * - Restauración automática de contenido (online/offline)
+ * - Actualización via electron-updater
+ * - Sincronización de activos locales
+ * - Modo vinculación (provisioning) para nuevos dispositivos
+ */
+
+const { app, BrowserWindow, screen, net } = require('electron');
+const log = require('electron-log');
 const path = require('path');
 const fs = require('fs');
-const { jwtDecode } = require('jwt-decode');
-const fetch = require('node-fetch');
 const { exec } = require('child_process');
-const log = require('electron-log');
-autoUpdater.logger = log;
-autoUpdater.logger.transports.file.level = 'info';
-log.info('App starting...');
 
-const gotTheLock = app.requestSingleInstanceLock();
-if (!gotTheLock) {
-  app.quit();
-} else {
-  app.on('second-instance', () => {
-    if (provisionWindow && !provisionWindow.isDestroyed()) {
-      if (provisionWindow.isMinimized()) provisionWindow.restore();
-      provisionWindow.focus();
-    }
-  });
+// Configura logger y auto-updater inmediatamente
+log.info('ScreensWeb Agent starting... (Mode: Safe-Update)');
+
+try {
+    const { configureUpdater, checkForUpdates } = require('./services/updater');
+    configureUpdater();
+    checkForUpdates();
+} catch (updaterError) {
+    log.error('Fatal: Failed to initialize auto-updater:', updaterError);
 }
 
-app.disableHardwareAcceleration();
+// ENVUELVE EL RESTO DEL ARRANQUE EN TRY/CATCH
+try {
+    const {
+        SERVER_URL,
+        CONFIG_DIR,
+        CONFIG_FILE_PATH,
+        STATE_FILE_PATH,
+        CONTENT_DIR,
+        AGENT_REFRESH_URL,
+        SYNC_API_URL,
+        CONSTANTS,
+    } = require('./config/constants');
 
-if (require('electron-squirrel-startup')) {
-    app.quit();
-}
+    // Importa utilidades
+    const { loadConfig, saveConfig, deleteConfig } = require('./utils/configManager');
 
-// CONSTANTES Y CONFIGURACIÓN
+    // Importa servicio de GPU
+    const { configureGpu, configureMemory, registerGpuCrashHandlers } = require('./services/gpu');
 
-const SERVER_URL = process.env.SERVER_URL || 'http://192.168.1.137:3000';
-const CONFIG_DIR = path.join(app.getPath('userData'), 'LuckiaScreensWeb');
-const CONFIG_FILE_PATH = path.join(CONFIG_DIR, 'luckia-config.json');
-const STATE_FILE_PATH = path.join(CONFIG_DIR, 'luckia-state.json');
-const AGENT_REFRESH_URL = `${SERVER_URL}/api/auth/agent-refresh`;
-const CONTENT_DIR = path.join(app.getPath('userData'), 'LuckiaScreensWeb', 'content');
-const SYNC_API_URL = `${SERVER_URL}/api/users/me/local-assets`;
+    // Importa servicio de actualizaciones
+    const { configureUpdater, checkForUpdates, handleForceUpdate } = require('./services/updater');
 
-console.log(`[CONFIG]: Usando servidor: ${SERVER_URL}`);
-console.log(`[CONFIG]: Directorio de contenido local: ${CONTENT_DIR}`)
+    // Importa servicio de autenticación
+    const { refreshAgentToken, startTokenRefreshLoop } = require('./services/auth');
 
-// VARIABLES GLOBALES
+    // Importa servicio de estado y pantallas
+    const {
+        buildDisplayMap,
+        loadLastState,
+        cleanOrphanedState,
+        setupAutoRefresh,
+        saveCurrentState,
+        restoreLastState
+    } = require('./services/state');
 
-let deviceId;           // ID único de la máquina.
-let agentToken;         // JWT de autenticación para el agente.
-let socket;             // Instancia del cliente Socket.IO.
-let provisionWindow;    // Referencia a la ventana de vinculación.
-let tokenRefreshInterval; // Timer para el bucle de refresco del token.
-let isCheckingForUpdate = false;// Bandera cooldown de actualizacion.
-let isSyncing = false; // Bandera evita sincronizaciones simultaneas.
-let isOnline = false; // Bandera para indicar si la maquina esta conectada a internet.
-const managedWindows = new Map(); // Mapa para gestionar las ventanas de contenido abiertas
-const retryManager = new Map(); // Mapa para gestionar los reintentos
+    // Importa servicio de activos
+    const { syncLocalAssets: syncAssetsService } = require('./services/assets');
 
-// FUNCIONES CONFIGURACIÓN Y AUTENTICACIÓN
+    // Importa servicio de socket
+    const { connectToSocketServer: connectSocketService, sendHeartbeat: heartbeatService } = require('./services/socket');
 
-/**
- * Carga la configuración del agente desde un archivo JSON.
- * @returns {object} El objeto de configuración o un objeto vacío si falla.
- */
-function loadConfig() {
-    try {
-        if (fs.existsSync(CONFIG_FILE_PATH)) {
-            const data = fs.readFileSync(CONFIG_FILE_PATH, 'utf8');
-            return JSON.parse(data);
-        }
-    } catch (error) {
-        console.error('[CONFIG]: Error al leer/parsear el archivo de configuracion:', error);
-    }
-    return {};
-}
+    // Importa servicio de red
+    const { startNetworkMonitoring: startNetworkService } = require('./services/network');
 
-/**
- * Guarda el objeto de configuración en un archivo JSON.
- * @param {object} config - El objeto de configuración a guardar.
- */
-function saveConfig(config) {
-    try {
-        if (!fs.existsSync(CONFIG_DIR)) {
-            fs.mkdirSync(CONFIG_DIR, { recursive: true });
-        }
-        fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(config, null, 2));
-    } catch (error) {
-        console.error('[CONFIG]: Error al guardar la configuracion:', error);
-    }
-}
+    // Importa handlers
+    const commandHandlers = require('./handlers/commands');
+    const { startProvisioningMode: startProvisioningHandler } = require('./handlers/provisioning');
 
-/**
- * Llama a la API del servidor para refrescar el JWT del agente.
- * @param {string} currentAgentToken - El token actual que se va a refrescar.
- * @returns {Promise<string>} El nuevo token o el token antiguo si el refresco falla.
- */
-async function refreshAgentToken(currentAgentToken) {
-    console.log('[AGENT-AUTH]: Intentando refrescar el token...');
-    try {
-        const response = await fetch(AGENT_REFRESH_URL, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${currentAgentToken}`,
-                'Content-Type': 'application/json'
+    // Importa servicios de dispositivo
+    const { getMachineId, registerDevice: registerDeviceService, handleRebootDevice: rebootDeviceService } = require('./services/device');
+
+
+    log.info('App starting...');
+
+    const gotTheLock = app.requestSingleInstanceLock();
+    if (!gotTheLock) {
+        app.quit();
+    } else {
+        app.on('second-instance', () => {
+            if (provisionWindow && !provisionWindow.isDestroyed()) {
+                if (provisionWindow.isMinimized()) provisionWindow.restore();
+                provisionWindow.focus();
             }
         });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ msg: 'Error de red' }));
-            throw new Error(`API error: ${response.status} - ${errorData.msg}`);
-        }
-
-        const data = await response.json();
-        const config = loadConfig();
-        config.agentToken = data.token;
-        saveConfig(config);
-
-        console.log('[AGENT-AUTH]: Token refrescado y guardado con exito.');
-        return data.token;
-
-    } catch (error) {
-        console.error('[AGENT-AUTH]: Fallo al refrescar el token:', error.message);
-        return currentAgentToken; // Devuelve el token viejo si falla
     }
-}
 
-/**
- * Inicia un bucle periódico para verificar la validez del token y refrescarlo si es necesario.
- */
-function startTokenRefreshLoop() {
-    if (tokenRefreshInterval) {
-        clearInterval(tokenRefreshInterval);
+    // OPTIMIZACIÓN DE RENDIMIENTO (usando módulo services/gpu.js)
+    configureGpu();
+    configureMemory();
+    registerGpuCrashHandlers();
+
+    // El arranque de Squirrel se ha eliminado para usar NSIS de forma nativa.
+
+    // INICIO AUTOMÁTICO WINDOWS
+    if (app.isPackaged) {
+        app.setLoginItemSettings({
+            openAtLogin: true,
+            path: app.getPath('exe'),
+            args: ['--hidden']
+        });
+        log.info('[STARTUP]: Configurado inicio automático con Windows.');
     }
-    console.log('[AGENT-AUTH]: Iniciando bucle de verificacion de token (cada 4 horas).');
 
-    tokenRefreshInterval = setInterval(async () => {
-        try {
-            if (!agentToken) return;
+    // Log de configuración (las constantes vienen de config/constants.js)
+    log.info(`[CONFIG]: Usando servidor: ${SERVER_URL}`);
+    log.info(`[CONFIG]: Directorio de contenido local: ${CONTENT_DIR}`);
 
-            const decoded = jwtDecode(agentToken);
-            const expTimeMs = decoded.exp * 1000;
-            const nowMs = Date.now();
-            const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+    // VARIABLES GLOBALES
+    let deviceId;
+    let agentToken;
+    let socket;
+    let provisionWindow;
+    let tokenRefreshInterval;
+    let isSyncing = false;
+    let isOnline = false;
+    let networkWasOffline = false; // Detecta recuperación de red
+    let networkCheckInterval; // Intervalo de monitoreo de red
+    let screenChangeTimeout; // Para el debounce de pantallas
+    const managedWindows = new Map();
+    const identifyWindows = new Map(); // Ventanas de identificación por pantalla
+    const retryManager = new Map();
+    const hardwareIdToDisplayMap = new Map();
+    const autoRefreshTimers = new Map();
 
-            // Si quedan menos de 30 días para la expiración, inicia el refresco.
-            if ((expTimeMs - nowMs) < THIRTY_DAYS_MS) {
-                console.log('[AGENT-AUTH]: El token esta a punto de expirar, iniciando refresco...');
-                agentToken = await refreshAgentToken(agentToken);
-            }
-        } catch (e) {
-            console.error('[AGENT-AUTH]: Error en el bucle de verificacion de token:', e);
-        }
-    }, 4 * 60 * 60 * 1000); // 4 horas
-}
-
-// LÓGICA DEL ACTUALIZADOR AUTOMÁTICO
-
-/**
- * Configura los listeners de electron-updater y busca actualizaciones.
- */
-const checkForUpdates = () => {
-    console.log('[UPDATER]: Buscando actualizaciones...');
-    autoUpdater.on('update-available', () => console.log('[UPDATER]: ¡Actualizacion disponible! Empezando descarga...'));
-    autoUpdater.on('update-not-available', () => console.log('[UPDATER]: Ya estas en la ultima version.'));
-    autoUpdater.on('error', (err) => console.error('[UPDATER]: Error en la actualizacion:', err));
-    autoUpdater.on('download-progress', (p) => console.log(`[UPDATER]: Descargando ${p.percent.toFixed(2)}%`));
-    autoUpdater.on('update-downloaded', () => {
-        console.log('[UPDATER]: Actualizacion descargada. Se instalara al reiniciar.');
-        autoUpdater.quitAndInstall();
-    });
-    autoUpdater.checkForUpdates();
-};
-
-// MODO VINCULACIÓN (PROVISIONING)
-
-/**
- * Inicia el agente en modo vinculación cuando no hay configuración previa.
- */
-function startProvisioningMode() {
-    deviceId = machineIdSync();
-    console.log(`[PROVISIONING]: ID de Maquina generado: ${deviceId}`);
-
-    provisionWindow = new BrowserWindow({
-        width: 800,
-        height: 400,
-        center: true,
-        icon: path.join(__dirname, 'build/icon.png'),
-        webPreferences: { preload: path.join(__dirname, 'preload.js') },
-        title: "Asistente de Vinculacion"
-    });
-    provisionWindow.setMenu(null);
-
-    provisionWindow.loadFile(path.join(__dirname, 'provision.html'));
-    provisionWindow.webContents.on('did-finish-load', () => {
-        provisionWindow.webContents.send('device-id', deviceId);
+    // Inicializar handlers de comandos con el contexto global
+    commandHandlers.initializeHandlers({
+        get socket() { return socket; },
+        get deviceId() { return deviceId; },
+        get agentToken() { return agentToken; },
+        managedWindows,
+        identifyWindows,
+        retryManager,
+        hardwareIdToDisplayMap,
+        autoRefreshTimers,
+        isOnline: () => isOnline,
+        saveCurrentState,
+        handleShowUrl: (cmd, att) => handleShowUrl(cmd, att)
     });
 
-    socket = io(SERVER_URL);
-    socket.on('connect', () => {
-        console.log('[PROVISIONING]: Conectado al servidor. Esperando vinculacion...');
-        socket.emit('register-for-provisioning', deviceId);
-    });
-
-    socket.on('provision-success', async () => {
-        console.log('[PROVISIONING]: Señal de provision recibida del servidor. Obteniendo token de agente...');
-
-        try {
-            const response = await fetch(`${SERVER_URL}/api/auth/agent-token`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ deviceId })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(`El servidor denego la emision del token: ${response.status} - ${errorData.msg || 'Error desconocido'}`);
-            }
-
-            const tokenData = await response.json();
-            agentToken = tokenData.token;
-
-            saveConfig({ deviceId, provisioned: true, agentToken });
-            console.log('[PROVISIONING]: Configuracion guardada. Reiniciando la aplicacion en modo normal...');
-
-            if (provisionWindow && !provisionWindow.isDestroyed()) {
-                provisionWindow.close();
-            }
-
-            socket.disconnect();
-
-            app.relaunch();
-            app.quit();
-
-        } catch (e) {
-            console.error('[PROVISIONING]: Error critico durante la provision:', e.message);
-            if (provisionWindow && !provisionWindow.isDestroyed()) {
-                provisionWindow.webContents.send('provision-error', e.message);
-            }
-        }
-    });
-}
-
-// MODO NORMAL
-
-function startNormalMode() {
-    const config = loadConfig();
-    deviceId = config.deviceId;
-    agentToken = config.agentToken;
-    console.log(`[NORMAL]: ID de Maquina cargado: ${deviceId}`);
-
-    startTokenRefreshLoop();
-    connectToSocketServer(agentToken);
-
-    setTimeout(restoreLastState, 2000);
-    setTimeout(checkForUpdates, 15000 + Math.random() * 60000);
-
-    screen.on('display-added', (event, newDisplay) => {
-        console.log(`[DISPLAY]: Nueva pantalla detectada: ID ${newDisplay.id}`);
-        if (socket?.connected) {
-            registerDevice();
-            const lastState = loadLastState();
-            const stableId = getStableScreenId(newDisplay);
-            if (lastState[stableId]) {
-                console.log(`[STATE]: Restaurando estado para la pantalla recién conectada ${newDisplay.id}...`);
-                handleShowUrl({
-                    action: 'show_url',
-                    screenIndex: stableId,
-                    url: lastState[stableId],
-                });
-            }
-        }
-    });
-
-    screen.on('display-removed', () => {
-        console.log('[DISPLAY]: Se ha desconectado una pantalla.');
-        if (socket?.connected) {
-            registerDevice();
-        }
-    });
-
-    screen.on('display-metrics-changed', () => {
-        console.log('[DISPLAY]: Las métricas de una pantalla han cambiado (resolución, etc.).');
-        if (socket?.connected) {
-            registerDevice();
-        }
-    });
-
-    setInterval(sendHeartbeat, 30 * 1000);
-
-    // --- OPTIMIZACIÓN: GESTIÓN DE MEMORIA PERIÓDICA ---
+    // Limpieza periódica de caché (cada 30 min)
     setInterval(() => {
-        if (managedWindows.size > 0) {
-            console.log('[OPTIMIZATION]: Forzando recolección de basura y limpieza de caché.');
-            managedWindows.forEach(win => {
-                if (win && !win.isDestroyed()) {
-                    const session = win.webContents.session;
-                    session.clearCache().catch(err => console.error('[OPTIMIZATION] Error al limpiar caché:', err));
-                    session.clearStorageData();
-                    win.webContents.collectGarbage();
-                }
-            });
-        }
-    }, 4 * 60 * 60 * 1000); // 4 horas
-}
-
-
-/**
- * Establece la conexión con el servidor de WebSocket y configura los listeners de eventos.
- * @param {string} token - El JWT del agente para la autenticación.
- */
-function connectToSocketServer(token) {
-    socket = io(SERVER_URL, {
-        reconnectionAttempts: 5,
-        reconnectionDelay: 3000,
-        auth: { token }
-    });
-
-    socket.on('connect', () => {
-        isOnline = true;
-        console.log('[NORMAL]: Conectado al servidor de WebSocket.');
-        registerDevice();
-        syncLocalAssets();
-    });
-
-    socket.on('disconnect', (reason) => {
-        isOnline = false;
-        console.log(`[NORMAL]: Desconectado del servidor: ${reason}`);
-    });
-
-    socket.on('command', (command) => {
-        console.log('[NORMAL]: Comando recibido:', command);
-        if (command.action === 'show_url') handleShowUrl(command);
-        if (command.action === 'close_screen') handleCloseScreen(command);
-        if (command.action === 'identify_screen') handleIdentifyScreen(command);
-        if (command.action === 'reboot_device') handleRebootDevice();
-        if (command.action === 'force_update') handleForceUpdate();
-    });
-
-    socket.on('assets-updated', () => {
-        console.log('[SYNC]: Notificacion recibida del servidor. Iniciando sincronizacion.');
-        syncLocalAssets();
-    });
-}
-
-function handleRebootDevice() {
-    let command = '';
-    const platform = process.platform;
-
-    // Determina el comando correcto basado en el sistema operativo.
-    if (platform === 'win32') {
-        command = 'shutdown /r /t 0';
-    } else if (platform === 'darwin' || platform === 'linux') {
-        command = 'shutdown -r now';
-    } else {
-        // Si el sistema operativo no es compatible, se registra un error y se detiene.
-        console.error(`[COMMAND-REBOOT]: Reboot command is not supported on platform: ${platform}`);
-        return;
-    }
-    console.log(`[COMMAND-REBOOT]: Executing reboot command for platform '${platform}': "${command}"`);
-    exec(command, (error, stdout, stderr) => {
-        if (error) {
-            console.error(`[COMMAND-REBOOT]: Failed to execute reboot command. Error: ${error.message}`);
-            return;
-        }
-        if (stderr) {
-            console.error(`[COMMAND-REBOOT]: Stderr reported on reboot command: ${stderr}`);
-            return;
-        }
-        console.log(`[COMMAND-REBOOT]: Reboot command successfully issued. Stdout: ${stdout}`);
-    });
-}
-
-function handleForceUpdate() {
-    // VERIFICA SI HAY UNA BUSQUEDA EN CURSO.
-    if (isCheckingForUpdate) {
-        console.log('[COMMAND-UPDATE]: Ignorando comando "force_update": ya hay una busqueda de actualizacion en curso.');
-        return;
-    }
-    console.log('[COMMAND-UPDATE]: Received force_update command. Checking for updates now...');
-
-    try {
-        isCheckingForUpdate = true;
-
-        autoUpdater.checkForUpdatesAndNotify();
-
-        setTimeout(() => {
-            console.log('[COMMAND-UPDATE]: Cooldown de actualizacion finalizado. Se permiten nuevas busquedas.');
-            isCheckingForUpdate = false;
-        }, 3 * 60 * 1000);
-
-    } catch (error) {
-        console.error('[COMMAND-UPDATE]: Failed to initiate update check.', error);
-        isCheckingForUpdate = false;
-    }
-}
-
-/**
- * Recopila información sobre las pantallas conectadas (usando IDs estables)
- * y la envía al servidor.
- */
-function registerDevice() {
-    const displays = screen.getAllDisplays();
-    const screenInfo = displays.map((d, index) => ({
-        id: getStableScreenId(d),
-        size: { width: Math.round(d.size.width * d.scaleFactor), height: Math.round(d.size.height * d.scaleFactor) }
-    }));
-    console.log('[NORMAL]: Enviando informacion de pantallas con IDs estables:', screenInfo);
-    if (socket && socket.connected) {
-        socket.emit('registerDevice', { deviceId, screens: screenInfo });
-    }
-}
-
-// MANEJO DE ESTADO Y COMANDOS
-
-/**
- * Genera un ID único y estable para una pantalla basado en su índice en el array
- * y sus coordenadas. Esto es más robusto que usar solo las coordenadas.
- * @param {object} display - El objeto de pantalla de Electron.
- * @param {number} index - El índice de la pantalla en el array de screen.getAllDisplays().
- * @returns {string} Un ID como 'idx0-x0-y0'.
- */
-function getStableScreenId(display) {
-    const { x, y, width, height } = display.bounds;
-    return `x${x}-y${y}-w${width}-h${height}`;
-}
-
-/**
- * Guarda la URL actual de una pantalla en el archivo de estado.
- * @param {object} display - El objeto de pantalla de Electron.
- * @param {string|null} url - La URL a guardar, o null para eliminarla.
- */
-function saveCurrentState(display, url) {
-    let state = loadLastState();
-    const stableId = getStableScreenId(display);
-
-    if (url) {
-        state[stableId] = url;
-    } else {
-        delete state[stableId];
-    }
-    fs.writeFileSync(STATE_FILE_PATH, JSON.stringify(state, null, 2));
-}
-
-/**
- * Carga de forma segura el último estado conocido desde el archivo JSON.
- * @returns {object} El objeto de estado o un objeto vacío si falla.
- */
-function loadLastState() {
-    try {
-        if (fs.existsSync(STATE_FILE_PATH)) {
-            const data = fs.readFileSync(STATE_FILE_PATH, 'utf8');
-            return JSON.parse(data) || {};
-        }
-    } catch (error) {
-        console.error('[STATE]: Error al leer el archivo de estado:', error);
-    }
-    return {};
-}
-
-/**
- * Restaura las URLs guardadas en las pantallas correspondientes al iniciar el agente.
- */
-function restoreLastState() {
-    const lastState = loadLastState();
-    if (Object.keys(lastState).length === 0) return;
-
-    console.log('[STATE]: Restaurando último estado conocido:', lastState);
-    const currentDisplays = screen.getAllDisplays();
-    currentDisplays.forEach(display => {
-        const stableId = getStableScreenId(display);
-        if (lastState[stableId]) {
-            handleShowUrl({
-                action: 'show_url',
-                screenIndex: stableId,
-                url: lastState[stableId],
-            });
-        }
-    });
-}
-
-/**
- * Maneja el comando 'show_url'.
- * Puede mostrar tanto URLs web (https://...) como activos locales (local:...).
- * Para activos locales, construye la ruta al archivo y la carga usando el protocolo 'file://'.
- */
-
-function sendCommandFeedback(command, status, message) {
-    if (!command || !command.commandId) {
-        return;
-    }
-
-    if (socket && socket.connected) {
-        const feedback = {
-            deviceId,
-            commandId: command.commandId,
-            action: command.action,
-            status,
-            message,
-        };
-        socket.emit('command-feedback', feedback);
-        console.log(`[FEEDBACK]: Enviando feedback para commandId ${command.commandId}: ${status}`);
-    }
-}
-
-function scheduleRetry(command) {
-    const { screenIndex } = command;
-
-    // Obtener el intento actual o empezar desde 0
-    let attempt = (retryManager.get(screenIndex)?.attempt || 0) + 1;
-
-    // No reintentar más de 5 veces para evitar bucles infinitos
-    const MAX_ATTEMPTS = 5;
-    if (attempt > MAX_ATTEMPTS) {
-        console.log(`[RETRY]: Se alcanzo el maximo de ${MAX_ATTEMPTS} reintentos para la pantalla ${screenIndex}. Abortando.`);
-        retryManager.delete(screenIndex);
-        return;
-    }
-
-    // Backoff exponencial: 30s, 1min, 2min, 4min, 8min
-    const delay = Math.pow(2, attempt - 1) * 30 * 1000;
-
-    console.log(`[RETRY]: Programando reintento #${attempt} para la pantalla ${screenIndex} en ${delay / 1000} segundos.`);
-
-    const timerId = setTimeout(() => {
-        console.log(`[RETRY]: Ejecutando reintento #${attempt} para la pantalla ${screenIndex}...`);
-
-        retryManager.delete(screenIndex);
-
-        handleShowUrl(command);
-
-    }, delay);
-
-    retryManager.set(screenIndex, { command, timerId, attempt });
-}
-
-/**
- * Crea y configura una nueva ventana de contenido, incluyendo listeners
- * para detectar fallos de carga, mostrar una página de fallback y programar reintentos.
- * @param {object} display - El objeto de pantalla de Electron donde se mostrará la ventana.
- * @param {string} urlToLoad - La URL final (ya sea file:// o https://) que se intentará cargar.
- * @param {object} command - El objeto de comando original, que contiene screenIndex, url original y commandId.
- * @returns {BrowserWindow} La instancia de la ventana creada.
- */
-function createContentWindow(display, urlToLoad, command) {
-    const { screenIndex, url: originalUrl } = command;
-    const fallbackPath = `file://${path.join(__dirname, 'fallback.html')}`;
-
-    const win = new BrowserWindow({
-        x: display.bounds.x, y: display.bounds.y,
-        width: display.bounds.width, height: display.bounds.height,
-        fullscreen: true,
-        kiosk: true,
-        frame: false,
-        show: false,
-        backgroundColor: '#000000',
-        webPreferences: {
-            nodeIntegration: false,
-            contextIsolation: true,
-            webSecurity: false,
-            allowRunningInsecureContent: true,
-            spellcheck: false,
-            backgroundThrottling: false,
-            devTools: !app.isPackaged,
-        }
-    });
-
-    // Muestra la ventana solo cuando el contenido está listo para ser pintado
-    win.once('ready-to-show', () => {
-        win.show();
-    });
-
-    win.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
-        console.error(`[RESILIENCE]: Fallo al cargar URL '${validatedURL}'. Razón: ${errorDescription}`);
-
-        if (validatedURL === fallbackPath) {
-            console.error('[RESILIENCE]: ¡La página de fallback no se pudo cargar!');
-            return;
-        }
-
-        if (command.commandId) {
-            const errorMsg = `Fallo al cargar URL '${originalUrl}'. Razón: ${errorDescription}`;
-            sendCommandFeedback(command, 'error', errorMsg);
-        }
-
-        if (socket && socket.connected) {
-            socket.emit('reportScreenState', { deviceId, screenId: screenIndex, url: '' });
-        }
-
-        const isNetworkError = errorCode <= -100 && errorCode >= -199;
-        if (!originalUrl.startsWith('local:') && isNetworkError) {
-            scheduleRetry(command);
-        }
-
-        win.loadURL(fallbackPath);
-    });
-
-    win.on('closed', () => {
-        managedWindows.delete(screenIndex);
-        if (retryManager.has(screenIndex)) {
-            clearTimeout(retryManager.get(screenIndex).timerId);
-            retryManager.delete(screenIndex);
-        }
-    });
-
-    win.loadURL(urlToLoad);
-    managedWindows.set(screenIndex, win);
-    return win;
-}
-
-/**
- * Maneja el comando 'show_url', ahora buscando la pantalla por su ID estable geométrico.
- * @param {object} command - El objeto del comando.
- * @param {number} [currentAttempt=0] - El número de intento de reintento actual.
- */
-function handleShowUrl(command, currentAttempt = 0) {
-    const { screenIndex, url, credentials, contentName } = command;
-
-    if (retryManager.has(screenIndex)) {
-        clearTimeout(retryManager.get(screenIndex).timerId);
-        retryManager.delete(screenIndex);
-    }
-
-    const targetDisplay = screen.getAllDisplays().find(d => getStableScreenId(d) === screenIndex);
-
-    if (!targetDisplay) {
-        sendCommandFeedback(command, 'error', `Pantalla con ID '${screenIndex}' no encontrada.`);
-        return;
-    }
-
-    saveCurrentState(targetDisplay, url);
-
-    if (!isOnline && !url.startsWith('local:')) {
-        const errorMsg = `Error: Sin conexion. No se puede cargar la URL '${url}'. Se reintentara cuando vuelva la conexion.`;
-        console.error(`[RESILIENCE]: ${errorMsg}`);
-        sendCommandFeedback(command, 'error', errorMsg);
-        scheduleRetry(command, currentAttempt);
-        return;
-    }
-
-    let finalUrl = url;
-    if (url.startsWith('local:')) {
-        const filename = url.substring(6);
-        const filePath = path.join(CONTENT_DIR, filename);
-        if (!fs.existsSync(filePath)) {
-            const errorMsg = `Error: Activo local no encontrado: ${filename}.`;
-            console.error(`[COMMAND]: ${errorMsg}`);
-            sendCommandFeedback(command, 'error', errorMsg);
-            return;
-        }
-        finalUrl = `file://${filePath}`;
-    }
-
-    try {
-        let win = managedWindows.get(screenIndex);
-        if (!win || win.isDestroyed()) {
-            win = createContentWindow(targetDisplay, 'about:blank', command);
-        }
-
-        win.webContents.removeAllListeners('did-finish-load');
-
-        const shouldAutoLogin = url.startsWith('https://lcr.sportradar.com') && !!credentials;
-        if (shouldAutoLogin) {
-            console.log(`[AUTOLOGIN]: Configurando listener para Sportradar...`);
-            win.webContents.on('did-finish-load', () => {
-                if (!win.isDestroyed() && win.webContents.getURL().startsWith('https://lcr.sportradar.com')) {
-                    console.log('[AUTOLOGIN]: Pagina de Sportradar cargada. Inyectando script...');
-                    const script = `
-                        (() => {
-                            try {
-                                const usernameInput = document.querySelector('input[name="username"]') || document.querySelector('#username');
-                                const passwordInput = document.querySelector('input[name="password"]') || document.querySelector('#password');
-                                const loginButton = document.querySelector('button[type="submit"]') || document.querySelector('button[name="login"]');
-                                
-                                if (!usernameInput || !passwordInput || !loginButton) {
-                                    return { success: false, reason: 'Campos de login no encontrados. Ajusta los selectores CSS.' };
-                                }
-                                
-                                usernameInput.value = ${JSON.stringify(credentials.username)};
-                                usernameInput.dispatchEvent(new Event('input', { bubbles: true }));
-                                passwordInput.value = ${JSON.stringify(credentials.password)};
-                                passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
-                                loginButton.click();
-                                return { success: true };
-                            } catch (e) {
-                                return { success: false, reason: 'Excepcion al ejecutar script: ' + e.message };
-                            }
-                        })();
-                    `;
-                    win.webContents.executeJavaScript(script)
-                        .then(result => {
-                            if (result?.success) {
-                                console.log('[AUTOLOGIN]: Script inyectado con éxito.');
-                            } else {
-                                console.warn('[AUTOLOGIN]: Falló la inyección:', result?.reason);
-                            }
-                        })
-                        .catch(err => console.error('[AUTOLOGIN]: Error al ejecutar script:', err));
-                }
-            });
-        }
-
-        win.loadURL(finalUrl);
-        win.focus();
-
-        if (socket && socket.connected) {
-            socket.emit('reportScreenState', { deviceId, screenId: screenIndex, url });
-        }
-
-        const displayName = contentName || url;
-        const successMsg = `Iniciando carga de '${displayName}' en la pantalla.`;
-        sendCommandFeedback(command, 'success', successMsg);
-
-    } catch (error) {
-        const errorMsg = `Error inesperado al ejecutar show_url: ${error.message}`;
-        console.error(`[COMMAND]: ${errorMsg}`);
-        sendCommandFeedback(command, 'error', errorMsg);
-    }
-}
-
-/**
- * Maneja el comando 'close_screen', buscando la ventana por su ID estable.
- * @param {object} command - El objeto del comando.
- */
-function handleCloseScreen(command) {
-    const { screenIndex } = command;
-    const win = managedWindows.get(screenIndex);
-
-    if (win && !win.isDestroyed()) {
-        win.close();
-    }
-
-    const targetDisplay = screen.getAllDisplays().find(d => getStableScreenId(d) === screenIndex);
-
-    if (targetDisplay) {
-        saveCurrentState(targetDisplay, null);
-        if (socket && socket.connected) {
-            socket.emit('reportScreenState', { deviceId, screenId: screenIndex, url: '' });
-        }
-    }
-
-    sendCommandFeedback(command, 'success', 'Comando de cierre ejecutado.');
-}
-
-function handleIdentifyScreen(command) {
-    const { screenIndex, identifierText } = command;
-    const targetDisplay = screen.getAllDisplays().find(d => getStableScreenId(d) === screenIndex);
-    if (!targetDisplay) return;
-
-    const identifyWin = new BrowserWindow({
-        x: targetDisplay.bounds.x, y: targetDisplay.bounds.y,
-        width: targetDisplay.bounds.width, height: targetDisplay.bounds.height,
-        frame: false, transparent: true, alwaysOnTop: true, skipTaskbar: true,
-        webPreferences: { preload: path.join(__dirname, 'identify-preload.js') }
-    });
-    identifyWin.setMenu(null);
-    identifyWin.loadFile(path.join(__dirname, 'identify.html'));
-    identifyWin.webContents.on('did-finish-load', () => {
-        identifyWin.webContents.send('set-identifier', identifierText);
-    });
-
-    setTimeout(() => {
-        if (identifyWin && !identifyWin.isDestroyed()) identifyWin.close();
-    }, 6000);
-}
-
-function sendHeartbeat() {
-    if (!socket || !socket.connected) return;
-    const displays = screen.getAllDisplays();
-    const connectedScreenIds = displays.map(d => getStableScreenId(d));
-    socket.emit('heartbeat', { screenIds: connectedScreenIds });
-    console.log('[HEARTBEAT]: Enviando latido con pantallas activas:', connectedScreenIds);
-}
-
-/**
- * Realiza el proceso completo de sincronizacion de activos locales.
- * Obtiene la lista de activos asignados desde el servidor.
- * Compara con los archivos existentes en el directorio local.
- * Descarga los archivos faltantes.
- * Elimina los archivos locales que ya no estan asignados.
- */
-async function syncLocalAssets() {
-    if (isSyncing) {
-        console.log('[SYNC]: Sincronizacion ya en progreso. Saltando.');
-        return;
-    }
-    isSyncing = true;
-    console.log('[SYNC]: Iniciando proceso de sincronizacion de activos locales...');
-
-    try {
-        // --- Obtiene lista de activos del servidor ---
-        console.log('[SYNC-DEBUG]: Pidiendo lista de activos desde el servidor...');
-        const response = await fetch(SYNC_API_URL, {
-            headers: { 'Authorization': `Bearer ${agentToken}` }
+        managedWindows.forEach((win, screenId) => {
+            if (!win.isDestroyed() && win.webContents && win.webContents.session) {
+                win.webContents.session.clearCache().catch(() => { });
+            }
         });
-        if (!response.ok) {
-            throw new Error(`Error del servidor al obtener la lista de activos: ${response.status}`);
-        }
-        const serverAssets = await response.json();
-        console.log(`[SYNC-DEBUG]: El servidor dice que debo tener ${serverAssets.length} archivos:`, serverAssets.map(a => a.originalFilename));
+    }, 30 * 60 * 1000);
 
-        const serverAssetMap = new Map(serverAssets.map(asset => [asset.serverFilename, asset]));
+    // MODO VINCULACION (PROVISIONING) - Primera configuración del dispositivo
 
-        // --- Lee archivos locales existentes
-        if (!fs.existsSync(CONTENT_DIR)) {
-            fs.mkdirSync(CONTENT_DIR, { recursive: true });
-        }
-        const localFiles = fs.readdirSync(CONTENT_DIR);
-        console.log(`[SYNC-DEBUG]: Encontrados ${localFiles.length} archivos locales en disco.`);
+    /**
+     * Inicia el agente en modo vinculacion para dispositivos sin configurar.
+     */
+    function startProvisioningMode() {
+        provisionWindow = startProvisioningHandler({
+            get socket() { return socket; }
+        });
+    }
 
-        // --- Determina que archivos eliminr
-        const filesToDelete = localFiles.filter(file => !serverAssetMap.has(file));
-        if (filesToDelete.length > 0) {
-            console.log('[SYNC-DEBUG]: Archivos a eliminar:', filesToDelete);
-            for (const fileToDelete of filesToDelete) {
-                try {
-                    fs.unlinkSync(path.join(CONTENT_DIR, fileToDelete));
-                    console.log(`[SYNC]: Archivo obsoleto eliminado: ${fileToDelete}`);
-                } catch (err) {
-                    console.error(`[SYNC]: Error al eliminar el archivo ${fileToDelete}:`, err);
+    // MODO NORMAL - Operación principal del agente
+
+    /**
+     * Manejador debounced para cambios de pantalla (conexión/desconexión de monitores).
+     * Espera estabilización antes de actualizar el mapa y restaurar contenido.
+     * @param {string} reason - Razón del cambio: 'added', 'removed', 'metrics-changed'
+     */
+    function onScreenChange(reason) {
+        if (screenChangeTimeout) clearTimeout(screenChangeTimeout);
+
+        log.info(`[DISPLAY]: Detectado cambio de pantalla (${reason}). Esperando estabilización...`);
+
+        screenChangeTimeout = setTimeout(async () => {
+            log.info('[DISPLAY]: Entorno estabilizado. Actualizando mapa de pantallas.');
+
+            // Guardar IDs de pantallas antes del cambio
+            const previousScreenIds = Array.from(hardwareIdToDisplayMap.keys());
+
+            await buildDisplayMap(hardwareIdToDisplayMap);
+
+            const currentScreenIds = Array.from(hardwareIdToDisplayMap.keys());
+
+            if (reason === 'removed') {
+                // Cerrar SOLO las ventanas huerfanas (pantallas que ya no existen)
+                const orphanedIds = previousScreenIds.filter(id => !currentScreenIds.includes(id));
+                for (const orphanedId of orphanedIds) {
+                    const win = managedWindows.get(orphanedId);
+                    if (win && !win.isDestroyed()) {
+                        log.info(`[DISPLAY]: Cerrando ventana huerfana para pantalla ${orphanedId}`);
+                        win.close();
+                    }
+                    managedWindows.delete(orphanedId);
                 }
             }
-        }
 
-        // --- Determina qué archivos descargar
-        const filesToDownload = serverAssets.filter(asset => !localFiles.includes(asset.serverFilename));
-        if (filesToDownload.length > 0) {
-            console.log('[SYNC-DEBUG]: Archivos a descargar:', filesToDownload.map(a => a.originalFilename));
-            for (const assetToDownload of filesToDownload) {
-                console.log(`[SYNC]: Descargando nuevo activo: ${assetToDownload.originalFilename}...`);
-                const downloadUrl = `${SERVER_URL}/local-assets/${assetToDownload.serverFilename}`;
-                const destinationPath = path.join(CONTENT_DIR, assetToDownload.serverFilename);
+            if (reason === 'added') {
+                // Identificar SOLO las pantallas nuevas (que no existian antes)
+                const newScreenIds = currentScreenIds.filter(id => !previousScreenIds.includes(id));
 
-                try {
-                    const downloadResponse = await fetch(downloadUrl);
-                    if (!downloadResponse.ok) throw new Error(`Fallo la descarga: ${downloadResponse.statusText}`);
+                if (newScreenIds.length > 0) {
+                    log.info(`[DISPLAY]: Nuevas pantallas detectadas: ${newScreenIds.join(', ')}`);
 
-                    const fileStream = fs.createWriteStream(destinationPath);
-                    await new Promise((resolve, reject) => {
-                        downloadResponse.body.pipe(fileStream);
-                        downloadResponse.body.on('error', reject);
-                        fileStream.on('finish', resolve);
-                    });
-                    console.log(`[SYNC]: Descarga completa: ${assetToDownload.originalFilename}`);
-                } catch (err) {
-                    console.error(`[SYNC]: Error al descargar ${assetToDownload.originalFilename}:`, err);
-                    if (fs.existsSync(destinationPath)) {
-                        fs.unlinkSync(destinationPath);
+                    // Restaurar contenido SOLO para las pantallas nuevas
+                    const lastState = loadLastState();
+                    for (const newId of newScreenIds) {
+                        if (lastState[newId]) {
+                            const screenData = lastState[newId];
+                            log.info(`[DISPLAY]: Restaurando contenido en pantalla ${newId}: ${screenData.url}`);
+                            setTimeout(() => {
+                                handleShowUrl({
+                                    action: 'show_url',
+                                    screenIndex: newId,
+                                    url: screenData.url,
+                                    credentials: screenData.credentials || null
+                                });
+                            }, 500);
+                        }
                     }
                 }
             }
-        } else {
-            console.log('[SYNC-DEBUG]: No hay archivos nuevos para descargar.');
+
+            if (socket?.connected) {
+                registerDevice();
+            }
+        }, CONSTANTS.SCREEN_DEBOUNCE_MS);
+    }
+
+    /**
+     * Inicializa el agente en modo operativo normal.
+     * Carga configuración, construye mapa de pantallas, restaura contenido y conecta al servidor.
+     */
+    async function startNormalMode() {
+        const config = loadConfig();
+        deviceId = config.deviceId;
+        agentToken = config.agentToken;
+        log.info(`[NORMAL]: ID de Maquina cargado: ${deviceId}`);
+
+        if (tokenRefreshInterval) clearInterval(tokenRefreshInterval);
+        tokenRefreshInterval = startTokenRefreshLoop(agentToken, (newToken) => {
+            agentToken = newToken;
+        });
+
+        // Construye el mapa de pantallas por primera vez ANTES de conectar
+        await buildDisplayMap(hardwareIdToDisplayMap);
+
+        // El agente funciona aunque el servidor no este disponible
+        restoreAllContentImmediately();
+
+        // Conecta al servidor (en paralelo, no bloquea la restauracion)
+        connectToSocketServer(agentToken);
+
+        // Inicia monitoreo de conectividad de red
+        startNetworkMonitoring();
+
+        // Offset aleatorio para evitar picos en el servidor
+        const updateDelay = CONSTANTS.UPDATE_CHECK_MIN_DELAY_MS + Math.random() * (CONSTANTS.UPDATE_CHECK_MAX_DELAY_MS - CONSTANTS.UPDATE_CHECK_MIN_DELAY_MS);
+        setTimeout(checkForUpdates, updateDelay);
+
+        screen.on('display-added', () => onScreenChange('added'));
+        screen.on('display-removed', () => onScreenChange('removed'));
+        screen.on('display-metrics-changed', () => onScreenChange('metrics-changed'));
+
+        setInterval(sendHeartbeat, CONSTANTS.HEARTBEAT_INTERVAL_MS);
+
+        setInterval(() => {
+            if (managedWindows.size > 0) {
+                log.info('[OPTIMIZATION]: Forzando limpieza de caché y storage.');
+                managedWindows.forEach(win => {
+                    if (win && !win.isDestroyed()) {
+                        win.webContents.session.clearCache().catch(err => log.error('[OPTIMIZATION] Error al limpiar caché:', err));
+                        win.webContents.session.clearStorageData().catch(err => log.error('[OPTIMIZATION] Error al limpiar storage:', err));
+                    }
+                });
+            }
+        }, CONSTANTS.GC_INTERVAL_MS);
+    }
+
+    /**
+     * Restaura TODO el contenido inmediatamente sin depender del servidor.
+     * Se ejecuta al inicio para garantizar que las pantallas muestren contenido
+     * aunque el servidor no esté disponible.
+     * - Si hay internet: carga las URLs normalmente
+     * - Si NO hay internet: muestra fallback para URLs remotas, carga contenido local
+     */
+    function restoreAllContentImmediately() {
+        const lastState = loadLastState();
+        if (Object.keys(lastState).length === 0) {
+            log.info('[STARTUP]: No hay estado previo para restaurar.');
+            return;
         }
 
-        console.log('[SYNC]: Proceso de sincronizacion finalizado.');
+        const hasInternet = net.isOnline();
+        log.info(`[STARTUP]: Restaurando contenido (Internet: ${hasInternet ? 'SI' : 'NO'})...`);
 
-    } catch (error) {
-        console.error('[SYNC]: Error critico durante la sincronizacion:', error.message);
-    } finally {
-        isSyncing = false;
+        const fallbackPath = `file://${path.join(__dirname, 'fallback.html')}`;
+        let restoredCount = 0;
+
+        for (const [stableId, screenData] of Object.entries(lastState)) {
+            if (screenData.url && hardwareIdToDisplayMap.has(stableId)) {
+                const isLocalContent = screenData.url.startsWith('local:');
+                const targetDisplay = hardwareIdToDisplayMap.get(stableId);
+
+                if (!hasInternet && !isLocalContent) {
+                    // Sin internet y contenido remoto: crear ventana directamente con fallback
+                    log.info(`[STARTUP]: Sin internet - creando ventana fallback en pantalla ${stableId}`);
+
+                    setTimeout(() => {
+                        // Cerrar ventana existente si hay
+                        const existingWin = managedWindows.get(stableId);
+                        if (existingWin && !existingWin.isDestroyed()) {
+                            existingWin.close();
+                        }
+
+                        // Crear ventana directamente con el fallback (sin pasar por handleShowUrl)
+                        const command = {
+                            action: 'show_url',
+                            screenIndex: stableId,
+                            url: screenData.url,
+                            credentials: screenData.credentials || null,
+                            refreshInterval: screenData.refreshInterval || 0
+                        };
+
+                        const win = createContentWindow(targetDisplay, fallbackPath, command);
+                        log.info(`[STARTUP]: Ventana fallback creada en pantalla ${stableId}`);
+                    }, 500 * restoredCount);
+                } else {
+                    // Con internet o contenido local: cargar normalmente
+                    log.info(`[STARTUP]: Restaurando pantalla ${stableId}: ${screenData.url}${screenData.refreshInterval ? ` (auto-refresh: ${screenData.refreshInterval}min)` : ''}`);
+
+                    setTimeout(() => {
+                        handleShowUrl({
+                            action: 'show_url',
+                            screenIndex: stableId,
+                            url: screenData.url,
+                            credentials: screenData.credentials || null,
+                            refreshInterval: screenData.refreshInterval || 0
+                        });
+                    }, 500 * restoredCount);
+                }
+
+                restoredCount++;
+            }
+        }
+
+        log.info(`[STARTUP]: ${restoredCount} pantallas procesadas.`);
     }
-}
 
-// CICLO DE VIDA DE LA APP
+    /**
+     * Inicia el monitoreo periódico de conectividad de red.
+     * Detecta pérdida y recuperación de conexión a internet.
+     * Cuando se recupera la conexión, restaura automáticamente las URLs guardadas.
+     */
+    function startNetworkMonitoring() {
+        if (networkCheckInterval) clearInterval(networkCheckInterval);
 
-const initialConfig = loadConfig();
-if (!initialConfig.deviceId) {
-    console.log('[INIT]: No se encontro configuracion. Iniciando modo vinculacion.');
-    app.whenReady().then(startProvisioningMode);
-} else {
-    console.log('[INIT]: Configuracion encontrada. Iniciando modo normal.');
-    app.whenReady().then(startNormalMode);
-}
-
-app.on('window-all-closed', () => {
-    if (provisionWindow && !provisionWindow.isDestroyed()) {
-        app.quit();
-    } else {
-        console.log('[LIFECYCLE]: Todas las ventanas de contenido cerradas, el agente sigue en ejecucion.');
+        networkCheckInterval = startNetworkService({
+            onOffline: () => {
+                isOnline = false;
+                networkWasOffline = true;
+                showFallbackOnRemoteWindows();
+            },
+            onOnline: () => {
+                isOnline = true;
+                networkWasOffline = false;
+                if (socket && !socket.connected) {
+                    log.info('[NETWORK]: Forzando reconexion del socket...');
+                    socket.connect();
+                }
+                log.info('[NETWORK]: Restaurando contenido guardado...');
+                restoreAllContentImmediately();
+            },
+            onCheckOnline: () => {
+                if (socket && !socket.connected) {
+                    log.info('[NETWORK]: Red online pero socket desconectado. Forzando reconexion...');
+                    socket.connect();
+                }
+            }
+        });
     }
-});
+
+    /**
+     * Muestra la página de fallback en todas las ventanas que tienen contenido remoto.
+     * Se usa cuando se pierde la conexión a internet.
+     */
+    function showFallbackOnRemoteWindows() {
+        const fallbackPath = `file://${path.join(__dirname, 'fallback.html')}`;
+        const lastState = loadLastState();
+
+        for (const [screenId, win] of managedWindows.entries()) {
+            if (win && !win.isDestroyed()) {
+                const screenData = lastState[screenId];
+                // Solo mostrar fallback si es contenido remoto (no local:)
+                if (screenData && screenData.url && !screenData.url.startsWith('local:')) {
+                    log.info(`[NETWORK]: Mostrando fallback en pantalla ${screenId} (sin internet)`);
+                    win.loadURL(fallbackPath);
+                }
+            }
+        }
+    }
+
+    /**
+     * Establece conexión WebSocket con el servidor central.
+     * Configura handlers para todos los eventos críticos.
+     * @param {string} token - JWT del agente para autenticación
+     */
+    function connectToSocketServer(token) {
+        socket = connectSocketService(token, {
+            onConnect: () => {
+                isOnline = true;
+                registerDevice();
+                syncLocalAssets();
+            },
+            onDisconnect: (reason) => {
+                isOnline = false;
+            },
+            onReconnect: (attemptNumber) => {
+                isOnline = true;
+                registerDevice();
+                syncLocalAssets();
+                setTimeout(() => restoreLastState(hardwareIdToDisplayMap, handleShowUrl), 1000);
+            },
+            onCommand: (command) => {
+                log.info('[SOCKET]: Comando recibido:', command);
+                if (command.action === 'show_url') handleShowUrl(command);
+                if (command.action === 'close_screen') handleCloseScreen(command);
+                if (command.action === 'identify_screen') handleIdentifyScreen(command);
+                if (command.action === 'refresh_screen') handleRefreshScreen(command);
+                if (command.action === 'reboot_device') handleRebootDevice();
+                if (command.action === 'force_update') handleForceUpdate();
+            },
+            onAssetsUpdated: () => {
+                log.info('[SYNC]: Notificacion recibida del servidor. Iniciando sincronizacion.');
+                syncLocalAssets();
+            },
+            onForceReprovision: () => {
+                log.warn('[SOCKET]: Recibido comando force-reprovision. Eliminando configuración...');
+                managedWindows.forEach((win) => { if (win && !win.isDestroyed()) win.close(); });
+                managedWindows.clear();
+                try {
+                    if (fs.existsSync(CONFIG_FILE_PATH)) fs.unlinkSync(CONFIG_FILE_PATH);
+                    if (fs.existsSync(STATE_FILE_PATH)) fs.unlinkSync(STATE_FILE_PATH);
+                    log.info('[SOCKET]: Configuración eliminada. Reiniciando aplicación...');
+                } catch (e) {
+                    log.error('[SOCKET]: Error al eliminar configuración:', e);
+                }
+                socket.disconnect();
+                app.relaunch();
+                app.quit();
+            }
+        });
+    }
+
+    /**
+     * Ejecuta reinicio del sistema operativo host.
+     */
+    function handleRebootDevice() {
+        rebootDeviceService();
+    }
+
+
+    // REGISTRO Y CONTROL DE DISPOSITIVO
+
+    /**
+     * Recopila información sobre las pantallas conectadas y la envía al servidor.
+     */
+    async function registerDevice() {
+        registerDeviceService(socket, deviceId, hardwareIdToDisplayMap);
+    }
+
+    // Los Command Handlers ahora residen en handlers/commands.js
+
+    const {
+        sendCommandFeedback,
+        handleShowUrl,
+        handleCloseScreen,
+        handleRefreshScreen,
+        handleIdentifyScreen,
+        createContentWindow
+    } = commandHandlers;
+
+
+
+    /**
+     * Envía latido periódico al servidor con lista de pantallas activas.
+     * Se ejecuta cada 30 segundos para mantener el estado de conexión.
+     */
+    function sendHeartbeat() {
+        heartbeatService(socket, Array.from(hardwareIdToDisplayMap.keys()));
+    }
+
+    /**
+     * Sincroniza activos locales con el servidor.
+     * Wrapper que gestiona el flag isSyncing y llama al servicio.
+     */
+    async function syncLocalAssets() {
+        if (isSyncing) {
+            log.info('[SYNC]: Sincronizacion ya en progreso. Saltando.');
+            return;
+        }
+        isSyncing = true;
+        try {
+            await syncAssetsService(agentToken);
+        } finally {
+            isSyncing = false;
+        }
+    }
+
+    /**
+     * Decide entre modo vinculación o modo normal según configuración existente.
+     */
+    const initialConfig = loadConfig();
+    app.whenReady().then(() => {
+        if (!initialConfig.deviceId) {
+            log.info('[INIT]: No se encontro configuracion. Iniciando modo vinculacion.');
+            startProvisioningMode();
+        } else {
+            log.info('[INIT]: Configuracion encontrada. Iniciando modo normal.');
+            startNormalMode();
+        }
+    });
+
+    app.on('window-all-closed', () => {
+        if (provisionWindow && !provisionWindow.isDestroyed()) {
+            app.quit();
+        } else {
+            log.info('[LIFECYCLE]: Todas las ventanas de contenido cerradas, el agente sigue en ejecucion.');
+        }
+    });
+
+} catch (bootstrapError) {
+    // El proceso sigue vivo para que electron-updater pueda descargar una versión corregida en segundo plano.
+    log.error('FATAL BOOTSTRAP ERROR: El agente no pudo iniciar correctamente.');
+    log.error(bootstrapError);
+    log.error('El agente permanecerá en espera de una auto-actualización correctiva...');
+
+    // Intentar mostrar una ventana de error mínima si Electron está listo
+    app.whenReady().then(() => {
+        const { BrowserWindow } = require('electron');
+        const errWin = new BrowserWindow({ width: 500, height: 400, title: "ScreensWeb Agent Update-Mode", frame: true, backgroundColor: '#1a1a1a' });
+        errWin.setMenu(null);
+        errWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`
+            <body style="background:#1a1a1a;color:#ff6600;font-family:sans-serif;padding:30px;text-align:center">
+                <h2 style="margin-bottom:10px">⚠️ Modo Autoreparación</h2>
+                <p style="color:#ccc;margin-bottom:20px">El agente ha encontrado un error y se está intentando auto-corregir descargando una nueva versión.</p>
+                <div style="background:#000;padding:15px;border-radius:8px;text-align:left;font-family:monospace;font-size:11px;color:#ef4444;height:120px;overflow:auto;border:1px solid #333">
+                    ${bootstrapError.stack || bootstrapError.message}
+                </div>
+                <p style="margin-top:20px;color:#666;font-size:12px">Buscando actualizaciones en segundo plano... No cierre esta ventana.</p>
+            </body>
+        `)}`);
+    }).catch(() => { });
+}
