@@ -1,12 +1,12 @@
 {
   "name": "local-agent",
-  "version": "1.0.28",
+  "version": "1.0.30",
   "description": "ScreensWeb Local Agent",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "build": "electron-builder",
-    "build:prod": "node -e \"if (!process.env.SERVER_URL) { console.error('ERROR: SERVER_URL is required for production build'); process.exit(1); }\" && electron-builder"
+    "build:prod": "node scripts/inject-config.js && electron-builder"
   },
   "keywords": [],
   "author": "SoporteEH",

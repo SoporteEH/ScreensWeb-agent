@@ -2,7 +2,7 @@
  * Constantes y configuración del agente ScreensWeb
  * 
  * - Desarrollo: usa .env con dotenv
- * - Producción: variables inyectadas en tiempo de build
+ * - Producción: SERVER_URL inyectado en package.json via extraMetadata
  */
 
 const { app } = require('electron');
@@ -11,9 +11,19 @@ const path = require('path');
 // Carga variables de entorno desde .env (desarrollo)
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
-// En desarrollo: definir en .env
-// En producción: inyectar via electron-builder en package.json
-const SERVER_URL = process.env.SERVER_URL;
+// Obtener SERVER_URL:
+// 1. Primero intenta desde process.env (desarrollo con .env)
+// 2. Luego desde package.json.config (producción empaquetada)
+let SERVER_URL = process.env.SERVER_URL;
+
+if (!SERVER_URL) {
+    try {
+        const packageJson = require('../package.json');
+        SERVER_URL = packageJson.config?.serverUrl;
+    } catch (e) {
+        // Ignorar error si no se puede leer package.json
+    }
+}
 
 if (!SERVER_URL) {
     console.error('='.repeat(60));
@@ -24,7 +34,7 @@ if (!SERVER_URL) {
     console.error('  2. Configura SERVER_URL=http://tu-servidor:3000');
     console.error('');
     console.error('Para producción:');
-    console.error('  Configura SERVER_URL en el build de electron-builder');
+    console.error('  Asegúrate que SERVER_URL esté en GitHub Secrets');
     console.error('='.repeat(60));
 }
 
