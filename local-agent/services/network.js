@@ -31,7 +31,6 @@ function startNetworkMonitoring(handlers) {
             if (handlers.onOnline) handlers.onOnline();
 
         } else if (isOnline) {
-            // Caso especial: red online pero algo más (como socket) podría necesitar check extra
             if (handlers.onCheckOnline) handlers.onCheckOnline();
         }
     }, CONSTANTS.NETWORK_CHECK_INTERVAL_MS);

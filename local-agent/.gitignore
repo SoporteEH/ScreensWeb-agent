@@ -15,6 +15,9 @@ build/
 *.snap
 
 # Archivos Sensibles / Configuración Local
+.env
+.env.*
+!.env.example
 luckia-config.json
 config.json
 

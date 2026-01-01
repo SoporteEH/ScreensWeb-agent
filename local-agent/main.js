@@ -1,8 +1,6 @@
 /**
  * ScreensWeb Local Agent - Main Process
  * 
- * Agente Electron para gestión remota de pantallas digitales.
- * 
  * - Conexión WebSocket resiliente con reconexión automática
  * - Gestión multi-pantalla con IDs estables por posición
  * - Restauración automática de contenido (online/offline)
@@ -17,8 +15,7 @@ const path = require('path');
 const fs = require('fs');
 const { exec } = require('child_process');
 
-// 1. PRIORIDAD MÁXIMA: Configurar el logger y el auto-updater inmediatamente
-// Esto asegura que si el resto del código falla, el agente pueda "curarse" a sí mismo.
+// Configura logger y auto-updater inmediatamente
 log.info('ScreensWeb Agent starting... (Mode: Safe-Update)');
 
 try {
@@ -29,7 +26,7 @@ try {
     log.error('Fatal: Failed to initialize auto-updater:', updaterError);
 }
 
-// 2. ENVOLVER EL RESTO DEL ARRANQUE EN TRY/CATCH
+// ENVUELVE EL RESTO DEL ARRANQUE EN TRY/CATCH
 try {
     const {
         SERVER_URL,
@@ -124,7 +121,7 @@ try {
     let tokenRefreshInterval;
     let isSyncing = false;
     let isOnline = false;
-    let networkWasOffline = false; // Para detectar recuperación de red
+    let networkWasOffline = false; // Detecta recuperación de red
     let networkCheckInterval; // Intervalo de monitoreo de red
     let screenChangeTimeout; // Para el debounce de pantallas
     const managedWindows = new Map();
@@ -156,9 +153,6 @@ try {
             }
         });
     }, 30 * 60 * 1000);
-
-    // Los listeners y la configuración ya se inicializaron al principio para seguridad.
-    // checkForUpdates(); // Se llama arriba
 
     // MODO VINCULACION (PROVISIONING) - Primera configuración del dispositivo
 
@@ -541,15 +535,10 @@ try {
     });
 
 } catch (bootstrapError) {
-    // Si llegamos aquí, el agente ha fallado al cargar sus módulos principales.
-    // IMPORTANTE: No llamamos a app.quit() inmediatamente. 
-    // Dejamos que el proceso siga vivo para que electron-updater (que ya se inició arriba)
-    // tenga oportunidad de descargar una versión corregida en segundo plano.
-    log.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+    // El proceso sigue vivo para que electron-updater pueda descargar una versión corregida en segundo plano.
     log.error('FATAL BOOTSTRAP ERROR: El agente no pudo iniciar correctamente.');
     log.error(bootstrapError);
     log.error('El agente permanecerá en espera de una auto-actualización correctiva...');
-    log.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
 
     // Intentar mostrar una ventana de error mínima si Electron está listo
     app.whenReady().then(() => {

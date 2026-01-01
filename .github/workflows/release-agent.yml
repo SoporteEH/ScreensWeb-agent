@@ -44,6 +44,7 @@ jobs:
         working-directory: ./local-agent
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SERVER_URL: ${{ secrets.SERVER_URL }}
 
       # Crea Release en GitHub
       - name: Create GitHub Release
