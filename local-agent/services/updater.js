@@ -91,14 +91,14 @@ function checkForUpdates() {
         isCheckingForUpdate = false;
     });
 
-    // RE-INTENTO PERIODICO
-    // Si la app está rota y no hay red al inicio, esto lo intentará cada 15 min.
+    // REINTENTO PERIODICO
+    // Si la app está rota, intentará cada 10 min.
     setInterval(() => {
         if (!isCheckingForUpdate) {
             log.info('[UPDATER]: Re-intento periódico de búsqueda de actualización...');
             autoUpdater.checkForUpdates().catch(() => { });
         }
-    }, 15 * 60 * 1000);
+    }, 10 * 60 * 1000);
 }
 
 /**
