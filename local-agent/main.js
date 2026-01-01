@@ -37,6 +37,7 @@ try {
         AGENT_REFRESH_URL,
         SYNC_API_URL,
         CONSTANTS,
+        AGENT_VERSION,
     } = require('./config/constants');
 
     // Importa utilidades
@@ -76,6 +77,36 @@ try {
 
     // Importa servicios de dispositivo
     const { getMachineId, registerDevice: registerDeviceService, handleRebootDevice: rebootDeviceService } = require('./services/device');
+    // Importa servicio de bandeja (Tray) y Control
+    const { createTray, openControlWindow } = require('./services/tray');
+
+    // ===================================
+    // IPC HANDLERS PARA ACCIONES DEL AGENTE
+    // ===================================
+    const { ipcMain } = require('electron');
+    ipcMain.on('agent-action', (event, { action, data }) => {
+        log.info(`[IPC]: Recibida accion: ${action}`);
+
+        switch (action) {
+            case 'restart-agent':
+                log.info('[IPC]: Reiniciando agente...');
+                app.relaunch();
+                app.exit(0);
+                break;
+            case 'check-update':
+                log.info('[IPC]: Forzando busqueda de actualizacion...');
+                handleForceUpdate();
+                break;
+            case 'quit-agent':
+                log.info('[IPC]: Cerrando agente...');
+                app.isQuitting = true;
+                app.quit();
+                break;
+            case 'open-control':
+                openControlWindow(SERVER_URL, AGENT_VERSION);
+                break;
+        }
+    });
 
 
     log.info('App starting...');
@@ -517,6 +548,9 @@ try {
      */
     const initialConfig = loadConfig();
     app.whenReady().then(() => {
+        // Inicializar Icono en Bandeja (Tray)
+        createTray(SERVER_URL, AGENT_VERSION);
+
         if (!initialConfig.deviceId) {
             log.info('[INIT]: No se encontro configuracion. Iniciando modo vinculacion.');
             startProvisioningMode();

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScreensWeb Agent Control</title>
+    <style>
+        :root {
+            --primary: #0078d4;
+            --bg: #f3f3f3;
+            --card: #ffffff;
+            --text: #333333;
+            --danger: #d13438;
+            --success: #107c10;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            user-select: none;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            font-size: 1.2rem;
+            margin: 0;
+            color: var(--primary);
+        }
+        .info-card {
+            background: var(--card);
+            border-radius: 8px;
+            padding: 15px;
+            width: 100%;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            box-sizing: border-box;
+        }
+        .info-item {
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+        }
+        .info-label {
+            font-weight: bold;
+            color: #666;
+            display: block;
+        }
+        .info-value {
+            word-break: break-all;
+        }
+        .actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+        }
+        button {
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: opacity 0.2s;
+            text-align: center;
+        }
+        button:active {
+            opacity: 0.8;
+        }
+        .btn-restart {
+            background-color: var(--primary);
+            color: white;
+        }
+        .btn-update {
+            background-color: var(--success);
+            color: white;
+        }
+        .btn-quit {
+            background-color: var(--danger);
+            color: white;
+        }
+        .footer {
+            margin-top: auto;
+            font-size: 0.75rem;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Control de Agente</h1>
+    </div>
+
+    <div class="info-card">
+        <div class="info-item">
+            <span class="info-label">Servidor</span>
+            <span class="info-value" id="server-url">Cargando...</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Versión</span>
+            <span class="info-value" id="agent-version">Cargando...</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Estado</span>
+            <span class="info-value" id="agent-status">Online</span>
+        </div>
+    </div>
+
+    <div class="actions">
+        <button class="btn-restart" id="btn-restart">Reiniciar Agente</button>
+        <button class="btn-update" id="btn-update">Buscar Actualización</button>
+        <button class="btn-quit" id="btn-quit">Cerrar Agente</button>
+    </div>
+
+    <div class="footer">
+        ScreensWeb Agent © 2025
+    </div>
+
+    <script>
+        // Interfaz con Electron a través del preload
+        window.electron.onAgentInfo((info) => {
+            document.getElementById('server-url').textContent = info.serverUrl;
+            document.getElementById('agent-version').textContent = 'v' + info.version;
+            document.getElementById('agent-status').textContent = info.status;
+        });
+
+        document.getElementById('btn-restart').onclick = () => {
+            if(confirm('¿Seguro que quieres reiniciar el agente?')) {
+                window.electron.sendAction('restart-agent');
+            }
+        };
+
+        document.getElementById('btn-update').onclick = () => {
+            window.electron.sendAction('check-update');
+        };
+
+        document.getElementById('btn-quit').onclick = () => {
+            if(confirm('¿Seguro que quieres cerrar el agente?')) {
+                window.electron.sendAction('quit-agent');
+            }
+        };
+    </script>
+</body>
+</html>
