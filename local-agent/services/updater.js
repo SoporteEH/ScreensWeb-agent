@@ -126,8 +126,8 @@ function checkForUpdates() {
         }, 5000);
     });
 
-    // Forzar la descarga completa
-    autoUpdater.disableWebInstaller = true;
+    // Permitir web installers (stub) para auto-updates
+    autoUpdater.disableWebInstaller = false;
     autoUpdater.allowDowngrade = true;
 
     // Iniciar la búsqueda de actualizaciones
