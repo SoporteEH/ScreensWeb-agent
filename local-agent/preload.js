@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('electron', {
 
     // Para el panel de control
     onAgentInfo: (callback) => ipcRenderer.on('agent-info', (event, ...args) => callback(...args)),
+    onUpdateStatus: (callback) => ipcRenderer.on('update-status', (event, ...args) => callback(...args)),
 
     sendAction: (action, data) => ipcRenderer.send('agent-action', { action, data })
 });

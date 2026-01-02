@@ -1,150 +1,393 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ScreensWeb Agent Control</title>
+    <title>ScreensWeb Agent</title>
     <style>
-        :root {
-            --primary: #0078d4;
-            --bg: #f3f3f3;
-            --card: #ffffff;
-            --text: #333333;
-            --danger: #d13438;
-            --success: #107c10;
-        }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg);
-            color: var(--text);
+        * {
             margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            height: 100vh;
-            user-select: none;
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        .header h1 {
-            font-size: 1.2rem;
-            margin: 0;
-            color: var(--primary);
-        }
-        .info-card {
-            background: var(--card);
-            border-radius: 8px;
-            padding: 15px;
-            width: 100%;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
+            padding: 0;
             box-sizing: border-box;
         }
-        .info-item {
-            margin-bottom: 10px;
-            font-size: 0.9rem;
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f0f0f;
+            color: #cfcfcf;
+            user-select: none;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
-        .info-label {
-            font-weight: bold;
-            color: #666;
-            display: block;
+
+        .container {
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            flex: 1;
         }
-        .info-value {
-            word-break: break-all;
+
+        /* Header */
+        .header {
+            text-align: center;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 4px;
+        }
+
+        .header .subtitle {
+            font-size: 13px;
+            color: #666666;
+        }
+
+        /* Status Card */
+        .status-card {
+            background: #1a1a1a;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .status-item:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .status-item:first-child {
+            padding-top: 0;
+        }
+
+        .status-label {
+            font-size: 14px;
+            color: #a1a1a1;
+            font-weight: 500;
+        }
+
+        .status-value {
+            font-size: 14px;
+            color: #ffffff;
+            font-weight: 600;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-badge.online {
+            background: rgba(34, 197, 94, 0.15);
+            color: #188640;
+        }
+
+        .status-badge.offline {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+        }
+
+        .status-badge::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        /* Actions */
         .actions {
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            width: 100%;
+            gap: 12px;
         }
+
         button {
-            padding: 10px;
+            height: 48px;
             border: none;
-            border-radius: 4px;
-            cursor: pointer;
+            border-radius: 8px;
+            font-size: 14px;
             font-weight: 600;
-            transition: opacity 0.2s;
-            text-align: center;
+            cursor: pointer;
+            transition: all 200ms ease-in-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
+
+        button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+        }
+
         button:active {
-            opacity: 0.8;
+            transform: translateY(0);
         }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
         .btn-restart {
-            background-color: var(--primary);
+            background: #cf6716;
             color: white;
         }
+
+        .btn-restart:hover {
+            background: #d95c0b;
+            box-shadow: 0 4px 12px rgba(207, 103, 22, 0.3);
+        }
+
         .btn-update {
-            background-color: var(--success);
+            background: #2c2c2c;
             color: white;
+            border: 1px solid #444444;
         }
+
+        .btn-update:hover {
+            background: #3d3d3d;
+        }
+
         .btn-quit {
-            background-color: var(--danger);
-            color: white;
+            background: transparent;
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
         }
+
+        .btn-quit:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: #ef4444;
+        }
+
+        /* Spinner */
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Notification Toast */
+        .notification {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: #1a1a1a;
+            color: #ffffff;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            font-size: 13px;
+            font-weight: 500;
+            opacity: 0;
+            transition: all 300ms ease-in-out;
+            z-index: 1000;
+            border: 1px solid #444444;
+        }
+
+        .notification.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .notification.success {
+            border-color: #22c55e;
+            background: rgba(34, 197, 94, 0.1);
+        }
+
+        .notification.error {
+            border-color: #ef4444;
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        .notification.info {
+            border-color: #cf6716;
+            background: rgba(207, 103, 22, 0.1);
+        }
+
+        /* Footer */
         .footer {
+            text-align: center;
+            padding: 16px 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
             margin-top: auto;
-            font-size: 0.75rem;
-            color: #888;
+        }
+
+        .footer-text {
+            font-size: 11px;
+            color: #666666;
+        }
+
+        /* Icon placeholders */
+        .icon {
+            width: 16px;
+            height: 16px;
         }
     </style>
 </head>
+
 <body>
-    <div class="header">
-        <h1>Control de Agente</h1>
-    </div>
+    <div class="container">
+        <div class="header">
+            <h1>Control panel</h1>
+        </div>
 
-    <div class="info-card">
-        <div class="info-item">
-            <span class="info-label">Servidor</span>
-            <span class="info-value" id="server-url">Cargando...</span>
+        <div class="status-card">
+            <div class="status-item">
+                <span class="status-label">Version</span>
+                <span class="status-value" id="agent-version">Cargando...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Estado</span>
+                <span class="status-badge online" id="agent-status">
+                    Online
+                </span>
+            </div>
         </div>
-        <div class="info-item">
-            <span class="info-label">Versión</span>
-            <span class="info-value" id="agent-version">Cargando...</span>
-        </div>
-        <div class="info-item">
-            <span class="info-label">Estado</span>
-            <span class="info-value" id="agent-status">Online</span>
-        </div>
-    </div>
 
-    <div class="actions">
-        <button class="btn-restart" id="btn-restart">Reiniciar Agente</button>
-        <button class="btn-update" id="btn-update">Buscar Actualización</button>
-        <button class="btn-quit" id="btn-quit">Cerrar Agente</button>
+        <div class="actions">
+            <button class="btn-restart" id="btn-restart">
+                Reiniciar
+            </button>
+            <button class="btn-update" id="btn-update">
+                <span id="update-btn-text">Buscar Actualización</span>
+                <span id="update-spinner" class="spinner" style="display: none;"></span>
+            </button>
+            <button class="btn-quit" id="btn-quit">
+                Cerrar App
+            </button>
+        </div>
+
+        <!-- Notification Toast -->
+        <div id="notification" class="notification"></div>
     </div>
 
     <div class="footer">
-        ScreensWeb Agent © 2025
+        <div class="footer-text">ScreensWeb Agent © <span id="current-year"></span></div>
     </div>
 
     <script>
-        // Interfaz con Electron a través del preload
+        document.getElementById('current-year').textContent = new Date().getFullYear();
+        // Interfaz Electron
         window.electron.onAgentInfo((info) => {
-            document.getElementById('server-url').textContent = info.serverUrl;
             document.getElementById('agent-version').textContent = 'v' + info.version;
-            document.getElementById('agent-status').textContent = info.status;
+
+            const statusBadge = document.getElementById('agent-status');
+            statusBadge.textContent = info.status;
+
+            if (info.status.toLowerCase() === 'online') {
+                statusBadge.className = 'status-badge online';
+            } else {
+                statusBadge.className = 'status-badge offline';
+            }
         });
 
         document.getElementById('btn-restart').onclick = () => {
-            if(confirm('¿Seguro que quieres reiniciar el agente?')) {
+            if (confirm('¿Seguro que quieres reiniciar el agente?')) {
                 window.electron.sendAction('restart-agent');
             }
         };
 
+        let isCheckingUpdate = false;
+
+        function showNotification(message, type = 'info') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type}`;
+
+            setTimeout(() => notification.classList.add('show'), 10);
+
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 4000);
+        }
+
         document.getElementById('btn-update').onclick = () => {
+            if (isCheckingUpdate) return;
+
+            isCheckingUpdate = true;
+            const btn = document.getElementById('btn-update');
+            const btnText = document.getElementById('update-btn-text');
+            const spinner = document.getElementById('update-spinner');
+
+            btn.disabled = true;
+            btnText.style.display = 'none';
+            spinner.style.display = 'inline-block';
+
             window.electron.sendAction('check-update');
+
+            // Auto re-enable after 10 seconds as safety
+            setTimeout(() => {
+                if (isCheckingUpdate) {
+                    isCheckingUpdate = false;
+                    btn.disabled = false;
+                    btnText.style.display = 'inline';
+                    spinner.style.display = 'none';
+                }
+            }, 10000);
         };
 
+        // Listen for update status
+        window.electron.onUpdateStatus((status) => {
+            isCheckingUpdate = false;
+            const btn = document.getElementById('btn-update');
+            const btnText = document.getElementById('update-btn-text');
+            const spinner = document.getElementById('update-spinner');
+
+            btn.disabled = false;
+            btnText.style.display = 'inline';
+            spinner.style.display = 'none';
+
+            if (status.status === 'up-to-date') {
+                showNotification(status.message, 'success');
+            } else if (status.status === 'downloading') {
+                showNotification(status.message, 'info');
+            } else if (status.status === 'downloaded') {
+                showNotification(status.message, 'success');
+            } else if (status.status === 'error') {
+                showNotification(status.message, 'error');
+            }
+        });
+
         document.getElementById('btn-quit').onclick = () => {
-            if(confirm('¿Seguro que quieres cerrar el agente?')) {
+            if (confirm('¿Seguro que quieres cerrar el agente?')) {
                 window.electron.sendAction('quit-agent');
             }
         };
     </script>
 </body>
+
 </html>

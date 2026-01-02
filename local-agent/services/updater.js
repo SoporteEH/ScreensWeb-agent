@@ -48,16 +48,49 @@ function checkForUpdates() {
     autoUpdater.on('update-available', (info) => {
         log.info('[UPDATER]: ¡Actualización disponible! Version:', info.version);
         log.info('[UPDATER]: Iniciando descarga...');
+
+        // Notificar a la ventana de control
+        const { BrowserWindow } = require('electron');
+        BrowserWindow.getAllWindows().forEach(win => {
+            if (win && !win.isDestroyed()) {
+                win.webContents.send('update-status', {
+                    status: 'downloading',
+                    message: `Descargando versión ${info.version}...`
+                });
+            }
+        });
     });
 
     autoUpdater.on('update-not-available', () => {
         log.info('[UPDATER]: Ya estás en la última versión.');
         isCheckingForUpdate = false;
+
+        // Notificar a la ventana de control
+        const { BrowserWindow } = require('electron');
+        BrowserWindow.getAllWindows().forEach(win => {
+            if (win && !win.isDestroyed()) {
+                win.webContents.send('update-status', {
+                    status: 'up-to-date',
+                    message: 'Agente en la última versión'
+                });
+            }
+        });
     });
 
     autoUpdater.on('error', (err) => {
         log.error('[UPDATER]: Error en la actualizacion:', err);
         isCheckingForUpdate = false;
+
+        // Notificar error a la ventana de control
+        const { BrowserWindow } = require('electron');
+        BrowserWindow.getAllWindows().forEach(win => {
+            if (win && !win.isDestroyed()) {
+                win.webContents.send('update-status', {
+                    status: 'error',
+                    message: 'Error al buscar actualización'
+                });
+            }
+        });
 
         // Intentar con una descarga completa después de un error
         if (err.message && err.message.includes('checksum')) {
@@ -75,6 +108,18 @@ function checkForUpdates() {
     autoUpdater.on('update-downloaded', (info) => {
         log.info('[UPDATER]: Actualizacion descargada. Version:', info.version);
         log.info('[UPDATER]: La actualizacion se instalará al reiniciar la aplicación.');
+
+        // Notificar a la ventana de control
+        const { BrowserWindow } = require('electron');
+        BrowserWindow.getAllWindows().forEach(win => {
+            if (win && !win.isDestroyed()) {
+                win.webContents.send('update-status', {
+                    status: 'downloaded',
+                    message: 'Actualización descargada. Reiniciando...'
+                });
+            }
+        });
+
         // Forzar la instalación después de 5 segundos
         setTimeout(() => {
             autoUpdater.quitAndInstall(true, true);

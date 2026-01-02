@@ -1,6 +1,6 @@
 name: Release Local Agent
 
-# Disparador - Se activa cuando se crea un tag con el formato
+# Disparador - Se activa cuando se crea tag con el formato
 on:
   push:
     tags:
@@ -24,7 +24,7 @@ jobs:
         with:
           node-version: '20'
 
-      # Cachea dependencias npm + velocidad
+      # Cachea dependencias npm
       - name: Cache npm dependencies
         uses: actions/cache@v4
         with:
@@ -45,15 +45,3 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SERVER_URL: ${{ secrets.SERVER_URL }}
-
-      # Crea Release en GitHub
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          files: |
-            local-agent/dist/*.exe
-            local-agent/dist/latest.yml
-            local-agent/dist/*.blockmap
-          draft: false
-          prerelease: false

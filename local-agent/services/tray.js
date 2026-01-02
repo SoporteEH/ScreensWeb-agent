@@ -24,34 +24,34 @@ function createTray(serverUrl, version) {
             { label: `ScreensWeb Agent v${version}`, enabled: false },
             { label: 'Servidor: ' + (serverUrl || 'No configurado'), enabled: false },
             { type: 'separator' },
-            { 
-                label: 'Abrir Panel de Control', 
-                click: () => openControlWindow(serverUrl, version) 
+            {
+                label: 'Abrir Panel de Control',
+                click: () => openControlWindow(serverUrl, version)
             },
             { type: 'separator' },
-            { 
-                label: 'Reiniciar Agente', 
+            {
+                label: 'Reiniciar Agente',
                 click: () => {
                     log.info('[TRAY]: Reiniciando agente...');
                     app.relaunch();
                     app.exit(0);
-                } 
+                }
             },
-            { 
-                label: 'Buscar Actualización', 
+            {
+                label: 'Buscar Actualización',
                 click: () => {
                     const { handleForceUpdate } = require('./updater');
                     handleForceUpdate();
-                } 
+                }
             },
             { type: 'separator' },
-            { 
-                label: 'Salir', 
+            {
+                label: 'Salir',
                 click: () => {
                     log.info('[TRAY]: Saliendo de la aplicación...');
                     app.isQuitting = true;
                     app.quit();
-                } 
+                }
             }
         ]);
 
@@ -80,8 +80,8 @@ function openControlWindow(serverUrl, version) {
     }
 
     controlWindow = new BrowserWindow({
-        width: 350,
-        height: 450,
+        width: 380,
+        height: 500,
         title: 'ScreensWeb Control',
         icon: path.join(__dirname, '..', 'icons', 'icon.png'),
         frame: true,
