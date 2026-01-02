@@ -1,6 +1,6 @@
 {
   "name": "local-agent",
-  "version": "1.0.33",
+  "version": "1.0.34",
   "description": "ScreensWeb Local Agent",
   "main": "main.js",
   "scripts": {
@@ -49,6 +49,12 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "nsis-web",
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "icons/icon.ico",
@@ -63,10 +69,23 @@
       "differentialPackage": true,
       "deleteAppDataOnUninstall": true
     },
+    "nsisWeb": {
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "artifactName": "ScreensWebAgent-installer.${ext}",
+      "appPackageUrl": "https://github.com/SoporteEH/ScreensWeb-agent/releases/download/v${version}/",
+      "menuCategory": false
+    },
     "publish": {
       "provider": "github",
       "owner": "SoporteEH",
       "repo": "ScreensWeb-agent"
     }
+  },
+  "config": {
+    "serverUrl": "http://192.168.1.134:3000"
   }
 }
