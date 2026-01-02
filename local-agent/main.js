@@ -10,7 +10,7 @@
  */
 
 const { app, BrowserWindow, screen, net } = require('electron');
-const log = require('electron-log');
+const { log } = require('./utils/logConfig');
 const path = require('path');
 const fs = require('fs');
 const { exec } = require('child_process');

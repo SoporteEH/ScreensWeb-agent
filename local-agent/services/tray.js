@@ -87,6 +87,8 @@ function openControlWindow(serverUrl, version) {
         frame: true,
         resizable: false,
         alwaysOnTop: true,
+        titleBarStyle: 'default',
+        backgroundColor: '#0a0a0a',
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,

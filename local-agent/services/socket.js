@@ -5,7 +5,7 @@
  */
 
 const { io } = require('socket.io-client');
-const log = require('electron-log');
+const { log, heartbeatLog } = require('../utils/logConfig');
 const { SERVER_URL, CONSTANTS } = require('../config/constants');
 
 /**
@@ -81,7 +81,7 @@ function connectToSocketServer(token, handlers) {
 function sendHeartbeat(socket, screenIds) {
     if (!socket || !socket.connected) return;
     socket.emit('heartbeat', { screenIds });
-    log.info('[HEARTBEAT]: Enviando latido con pantallas activas:', screenIds);
+    heartbeatLog.info(screenIds); // Reduce verbosidad: solo loggea cada 10 heartbeats
 }
 
 module.exports = {
