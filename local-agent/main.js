@@ -40,19 +40,19 @@ try {
         AGENT_VERSION,
     } = require('./config/constants');
 
-    // Importa utilidades
+    // utilidades
     const { loadConfig, saveConfig, deleteConfig } = require('./utils/configManager');
 
-    // Importa servicio de GPU
+    // GPU
     const { configureGpu, configureMemory, registerGpuCrashHandlers } = require('./services/gpu');
 
     // Importa servicio de actualizaciones
     const { configureUpdater, checkForUpdates, handleForceUpdate } = require('./services/updater');
 
-    // Importa servicio de autenticación
+    // autenticación
     const { refreshAgentToken, startTokenRefreshLoop } = require('./services/auth');
 
-    // Importa servicio de estado y pantallas
+    // estado y pantallas
     const {
         buildDisplayMap,
         loadLastState,
@@ -62,32 +62,31 @@ try {
         restoreLastState
     } = require('./services/state');
 
-    // Importa servicio de activos
+    // activos
     const { syncLocalAssets: syncAssetsService } = require('./services/assets');
 
-    // Importa servicio de socket
+    // socket
     const { connectToSocketServer: connectSocketService, sendHeartbeat: heartbeatService } = require('./services/socket');
 
-    // Importa servicio de red
+    // red
     const { startNetworkMonitoring: startNetworkService } = require('./services/network');
 
-    // Importa handlers
+    // handlers
     const commandHandlers = require('./handlers/commands');
     const { startProvisioningMode: startProvisioningHandler } = require('./handlers/provisioning');
 
-    // Importa servicios de dispositivo
+    // dispositivo
     const { getMachineId, registerDevice: registerDeviceService, handleRebootDevice: rebootDeviceService } = require('./services/device');
-    // Importa servicio de bandeja (Tray) y Control
+    // bandeja (Tray) y Control
     const { createTray, openControlWindow } = require('./services/tray');
 
-    // ===================================
     // IPC HANDLERS PARA ACCIONES DEL AGENTE
-    // ===================================
     const { ipcMain } = require('electron');
     ipcMain.on('agent-action', (event, { action, data }) => {
         log.info(`[IPC]: Recibida accion: ${action}`);
 
         switch (action) {
+            case 'restart':
             case 'restart-agent':
                 log.info('[IPC]: Reiniciando agente...');
                 app.relaunch();
@@ -97,6 +96,7 @@ try {
                 log.info('[IPC]: Forzando busqueda de actualizacion...');
                 handleForceUpdate();
                 break;
+            case 'quit':
             case 'quit-agent':
                 log.info('[IPC]: Cerrando agente...');
                 app.isQuitting = true;

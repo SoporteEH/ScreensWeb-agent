@@ -7,7 +7,7 @@
 
 const { screen } = require('electron');
 const fs = require('fs');
-const log = require('electron-log');
+const { log } = require('../utils/logConfig');
 const { STATE_FILE_PATH } = require('../config/constants');
 
 /**

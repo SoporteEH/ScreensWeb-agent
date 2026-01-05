@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 // Usamos el fetch nativo global de Node/Electron
 const { Readable } = require('stream'); // Necesario para manejar streams de descarga con el nuevo fetch
-const log = require('electron-log');
+const { log } = require('../utils/logConfig');
 const { SYNC_API_URL, CONTENT_DIR, SERVER_URL } = require('../config/constants');
 
 /**

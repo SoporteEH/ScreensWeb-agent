@@ -20,13 +20,74 @@
             color: #ffffff;
             min-height: 100vh;
             display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 24px;
+            flex-direction: column;
+            padding: 0;
             overflow: hidden;
         }
 
+        /* Custom Title Bar */
+        .title-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 32px;
+            background: #1a1a1a;
+            border-bottom: 1px solid #2c2c2c;
+            -webkit-app-region: drag;
+            user-select: none;
+            padding: 0 12px;
+        }
+
+        .title-bar-text {
+            font-size: 12px;
+            color: #888888;
+            font-weight: 500;
+        }
+
+        .title-bar-controls {
+            display: flex;
+            gap: 8px;
+            -webkit-app-region: no-drag;
+        }
+
+        .title-bar-button {
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.15s;
+            background: transparent;
+        }
+
+        .title-bar-button:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .title-bar-button.close:hover {
+            background: #ef4444;
+        }
+
+        .title-bar-button .material-icons {
+            font-size: 16px;
+            color: #888888;
+        }
+
+        .title-bar-button.close:hover .material-icons {
+            color: white;
+        }
+
         .container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .content-wrapper {
             width: 100%;
             max-width: 400px;
             display: flex;
@@ -324,52 +385,67 @@
 </head>
 
 <body>
-    <div class="container">
-        <!-- Header -->
-        <div class="header">
-            <div class="logo">
-                <span class="material-icons">grid_view</span>
+    <!-- Custom Title Bar -->
+    <div class="title-bar">
+        <span class="title-bar-text">Control Panel</span>
+        <div class="title-bar-controls">
+            <div class="title-bar-button" id="btn-minimize">
+                <span class="material-icons">minimize</span>
             </div>
-            <h1 class="title">Control panel</h1>
-            <span class="version-badge" id="agent-version">v1.0.38</span>
+            <div class="title-bar-button close" id="btn-window-close">
+                <span class="material-icons">close</span>
+            </div>
         </div>
+    </div>
 
-        <!-- Card -->
-        <div class="card">
-            <!-- Status -->
-            <div class="status-section">
-                <span class="status-label">Estado</span>
-                <div class="status-badge" id="status-container">
-                    <div class="status-dot"></div>
-                    <span class="status-text" id="agent-status">Online</span>
+    <!-- Main Container -->
+    <div class="container">
+        <div class="content-wrapper">
+            <!-- Header -->
+            <div class="header">
+                <div class="logo">
+                    <span class="material-icons">grid_view</span>
+                </div>
+                <span class="version-badge" id="agent-version"></span>
+            </div>
+
+            <!-- Card -->
+            <div class="card">
+                <!-- Status -->
+                <div class="status-section">
+                    <span class="status-label">Estado</span>
+                    <div class="status-badge" id="status-container">
+                        <div class="status-dot"></div>
+                        <span class="status-text" id="agent-status">Online</span>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="actions">
+                    <button class="btn btn-primary" id="btn-restart">
+                        <span class="material-icons">restart_alt</span>
+                        <span>Reiniciar</span>
+                    </button>
+
+                    <button class="btn btn-secondary" id="btn-update">
+                        <span id="update-btn-text">
+                            <span class="material-icons">system_update_alt</span>
+                            <span>Buscar Actualización</span>
+                        </span>
+                        <span id="update-spinner" class="spinner" style="display: none;"></span>
+                    </button>
+
+                    <button class="btn btn-danger" id="btn-quit">
+                        <span class="material-icons">power_settings_new</span>
+                        <span>Cerrar App</span>
+                    </button>
                 </div>
             </div>
 
-            <!-- Actions -->
-            <div class="actions">
-                <button class="btn btn-primary" id="btn-restart">
-                    <span class="material-icons">restart_alt</span>
-                    <span>Reiniciar</span>
-                </button>
-
-                <button class="btn btn-secondary" id="btn-update">
-                    <span id="update-btn-text">
-                        <span class="material-icons">system_update_alt</span>
-                        <span>Buscar Actualización</span>
-                    </span>
-                    <span id="update-spinner" class="spinner" style="display: none;"></span>
-                </button>
-
-                <button class="btn btn-danger" id="btn-quit">
-                    <span class="material-icons">power_settings_new</span>
-                    <span>Cerrar App</span>
-                </button>
+            <!-- Footer -->
+            <div class="footer">
+                <div class="footer-text">ScreensWeb Agent © <span id="current-year"></span></div>
             </div>
-        </div>
-
-        <!-- Footer -->
-        <div class="footer">
-            <div class="footer-text">ScreensWeb Agent © <span id="current-year"></span></div>
         </div>
     </div>
 
@@ -463,6 +539,15 @@
             setTimeout(() => {
                 notification.classList.remove('show');
             }, 6000);
+        });
+
+        // Event listeners para controles de ventana personalizados
+        document.getElementById('btn-minimize').addEventListener('click', () => {
+            window.electron.minimizeWindow();
+        });
+
+        document.getElementById('btn-window-close').addEventListener('click', () => {
+            window.electron.closeWindow();
         });
     </script>
 </body>

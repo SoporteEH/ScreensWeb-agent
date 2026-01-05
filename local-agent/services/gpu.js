@@ -8,7 +8,7 @@
 const { app } = require('electron');
 const fs = require('fs');
 const path = require('path');
-const log = require('electron-log');
+const { log } = require('../utils/logConfig');
 
 const GPU_CONFIG_FILE = path.join(app.getPath('userData'), 'gpu-config.json');
 

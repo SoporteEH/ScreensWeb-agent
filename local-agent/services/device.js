@@ -7,7 +7,7 @@
 
 const { machineIdSync } = require('node-machine-id');
 const { exec } = require('child_process');
-const log = require('electron-log');
+const { log } = require('../utils/logConfig');
 const { app } = require('electron');
 
 /**

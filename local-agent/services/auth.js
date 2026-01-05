@@ -6,7 +6,7 @@
 
 // Usamos el fetch nativo global de Node/Electron
 const { jwtDecode } = require('jwt-decode');
-const log = require('electron-log');
+const { log } = require('../utils/logConfig');
 const { AGENT_REFRESH_URL } = require('../config/constants');
 const { loadConfig, saveConfig } = require('../utils/configManager');
 

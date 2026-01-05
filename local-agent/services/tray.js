@@ -4,7 +4,7 @@
 
 const { Tray, Menu, app, BrowserWindow } = require('electron');
 const path = require('path');
-const log = require('electron-log');
+const { log } = require('../utils/logConfig');
 
 let tray = null;
 let controlWindow = null;
@@ -81,14 +81,13 @@ function openControlWindow(serverUrl, version) {
 
     controlWindow = new BrowserWindow({
         width: 420,
-        height: 580,
+        height: 600,
         title: 'ScreensWeb Control',
         icon: path.join(__dirname, '..', 'icons', 'icon.png'),
-        frame: true,
+        frame: false,
         resizable: false,
         alwaysOnTop: true,
-        titleBarStyle: 'default',
-        backgroundColor: '#0a0a0a',
+        backgroundColor: '#1a1a1a',
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -103,7 +102,7 @@ function openControlWindow(serverUrl, version) {
         controlWindow.webContents.send('agent-info', {
             serverUrl: serverUrl || 'Desconocido',
             version: version || '1.0.0',
-            status: 'Online' // Esto se podría actualizar dinámicamente
+            status: 'Online'
         });
     });
 
@@ -113,6 +112,19 @@ function openControlWindow(serverUrl, version) {
 
     // Quitar barra de menú
     controlWindow.setMenuBarVisibility(false);
+
+    // Handler para controles de ventana personalizados
+    const { ipcMain } = require('electron');
+    ipcMain.removeAllListeners('window-control'); // Evitar duplicados
+    ipcMain.on('window-control', (event, action) => {
+        if (controlWindow && !controlWindow.isDestroyed()) {
+            if (action === 'minimize') {
+                controlWindow.minimize();
+            } else if (action === 'close') {
+                controlWindow.close();
+            }
+        }
+    });
 }
 
 module.exports = {

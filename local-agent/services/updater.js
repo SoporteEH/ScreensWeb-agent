@@ -5,7 +5,7 @@
  */
 
 const { autoUpdater } = require('electron-updater');
-const log = require('electron-log');
+const { log } = require('../utils/logConfig');
 
 // Variable interna para controlar si hay una actualización en curso
 let isCheckingForUpdate = false;
@@ -54,7 +54,7 @@ function checkForUpdates() {
         BrowserWindow.getAllWindows().forEach(win => {
             if (win && !win.isDestroyed()) {
                 win.webContents.send('update-status', {
-                    status: 'downloading',
+                    type: 'downloading',
                     message: `Descargando versión ${info.version}...`
                 });
             }
@@ -70,7 +70,7 @@ function checkForUpdates() {
         BrowserWindow.getAllWindows().forEach(win => {
             if (win && !win.isDestroyed()) {
                 win.webContents.send('update-status', {
-                    status: 'up-to-date',
+                    type: 'up-to-date',
                     message: 'Agente en la última versión'
                 });
             }
@@ -114,7 +114,7 @@ function checkForUpdates() {
         BrowserWindow.getAllWindows().forEach(win => {
             if (win && !win.isDestroyed()) {
                 win.webContents.send('update-status', {
-                    status: 'downloaded',
+                    type: 'downloaded',
                     message: 'Actualización descargada. Reiniciando...'
                 });
             }

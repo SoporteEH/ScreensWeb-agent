@@ -5,7 +5,7 @@
  */
 
 const { net } = require('electron');
-const log = require('electron-log');
+const { log } = require('../utils/logConfig');
 const { CONSTANTS } = require('../config/constants');
 
 /**

@@ -5,7 +5,7 @@
  */
 
 const fs = require('fs');
-const log = require('electron-log');
+const { log } = require('./logConfig');
 const { CONFIG_DIR, CONFIG_FILE_PATH } = require('../config/constants');
 
 /**

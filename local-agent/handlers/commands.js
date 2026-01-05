@@ -7,7 +7,7 @@
 const { BrowserWindow, app } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const log = require('electron-log');
+const { log } = require('../utils/logConfig');
 const { CONTENT_DIR } = require('../config/constants');
 
 let context = {};
