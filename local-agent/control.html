@@ -4,7 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ScreensWeb Agent</title>
+    <title>Control Panel</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -13,175 +15,236 @@
         }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0f0f0f;
-            color: #cfcfcf;
-            user-select: none;
-            overflow: hidden;
-            height: 100vh;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #1a1a1a;
+            color: #ffffff;
+            min-height: 100vh;
             display: flex;
-            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            overflow: hidden;
         }
 
         .container {
-            padding: 24px;
-            padding-bottom: 60px;
+            width: 100%;
+            max-width: 400px;
             display: flex;
             flex-direction: column;
-            gap: 20px;
-            flex: 1;
-            overflow-y: auto;
+            align-items: center;
         }
 
         /* Header */
         .header {
+            width: 100%;
+            margin-bottom: 32px;
             text-align: center;
-            padding-bottom: 8px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        .header h1 {
-            font-size: 20px;
-            font-weight: 600;
-            color: #ffffff;
-            margin-bottom: 4px;
-        }
-
-        .header .subtitle {
-            font-size: 13px;
-            color: #666666;
-        }
-
-        /* Status Card */
-        .status-card {
-            background: #1a1a1a;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        }
-
-        .status-item {
             display: flex;
-            justify-content: space-between;
+            flex-direction: column;
             align-items: center;
-            padding: 12px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            gap: 12px;
         }
 
-        .status-item:last-child {
-            border-bottom: none;
-            padding-bottom: 0;
+        .logo {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #ff6600, #ff8533);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(255, 102, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        .status-item:first-child {
-            padding-top: 0;
+        .logo .material-icons {
+            color: white;
+            font-size: 28px;
+        }
+
+        .title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: -0.5px;
+        }
+
+        .version-badge {
+            font-size: 10px;
+            color: #666666;
+            font-weight: 500;
+            opacity: 0.6;
+            margin-top: -4px;
+        }
+
+        /* Card */
+        .card {
+            width: 100%;
+            background: #2c2c2c;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
+            padding: 24px;
+            border: 1px solid #3d3d3d;
+        }
+
+        /* Status Section */
+        .status-section {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-bottom: 24px;
+            margin-bottom: 24px;
+            border-bottom: 1px solid rgba(61, 61, 61, 0.5);
         }
 
         .status-label {
             font-size: 14px;
-            color: #a1a1a1;
             font-weight: 500;
-        }
-
-        .status-value {
-            font-size: 14px;
-            color: #ffffff;
-            font-weight: 600;
+            color: #888888;
         }
 
         .status-badge {
-            display: inline-flex;
+            display: flex;
             align-items: center;
-            gap: 6px;
-            padding: 4px 12px;
-            border-radius: 9999px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        .status-badge.online {
-            background: rgba(34, 197, 94, 0.15);
-            color: #1b9146;
+            gap: 8px;
+            background: rgba(34, 197, 94, 0.1);
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(34, 197, 94, 0.2);
         }
 
         .status-badge.offline {
-            background: rgba(239, 68, 68, 0.15);
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.2);
+        }
+
+        .status-dot {
+            position: relative;
+            width: 10px;
+            height: 10px;
+        }
+
+        .status-dot::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: #22c55e;
+            border-radius: 50%;
+            animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+            opacity: 0.75;
+        }
+
+        .status-dot::after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: #22c55e;
+            border-radius: 50%;
+        }
+
+        .status-badge.offline .status-dot::before,
+        .status-badge.offline .status-dot::after {
+            background: #ef4444;
+        }
+
+        @keyframes ping {
+
+            75%,
+            100% {
+                transform: scale(2);
+                opacity: 0;
+            }
+        }
+
+        .status-text {
+            font-size: 12px;
+            font-weight: 600;
+            color: #22c55e;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-badge.offline .status-text {
             color: #ef4444;
         }
 
-        .status-badge::before {
-            content: '';
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: currentColor;
-        }
-
-        /* Actions */
+        /* Buttons */
         .actions {
             display: flex;
             flex-direction: column;
             gap: 12px;
         }
 
-        button {
-            height: 48px;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 200ms ease-in-out;
+        .btn {
+            width: 100%;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 8px;
+            padding: 12px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: inherit;
         }
 
-        button:hover {
+        .btn .material-icons {
+            font-size: 18px;
+            transition: transform 0.5s ease;
+        }
+
+        .btn-primary {
+            background: #ff6600;
+            color: white;
+            box-shadow: 0 4px 6px rgba(255, 102, 0, 0.2);
+        }
+
+        .btn-primary:hover {
+            background: #e65c00;
+            box-shadow: 0 6px 12px rgba(255, 102, 0, 0.3);
             transform: translateY(-1px);
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
         }
 
-        button:active {
-            transform: translateY(0);
+        .btn-primary:hover .material-icons {
+            transform: rotate(180deg);
         }
 
-        button:disabled {
+        .btn-primary:disabled {
             opacity: 0.5;
             cursor: not-allowed;
             transform: none !important;
         }
 
-        .btn-restart {
-            background: #cf6716;
-            color: white;
-        }
-
-        .btn-restart:hover {
-            background: #d95c0b;
-            box-shadow: 0 4px 12px rgba(207, 103, 22, 0.3);
-        }
-
-        .btn-update {
-            background: #2c2c2c;
-            color: white;
-            border: 1px solid #444444;
-        }
-
-        .btn-update:hover {
+        .btn-secondary {
             background: #3d3d3d;
+            color: #ffffff;
         }
 
-        .btn-quit {
+        .btn-secondary:hover {
+            background: #4a4a4a;
+        }
+
+        .btn-secondary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary .material-icons {
+            color: #888888;
+        }
+
+        .btn-danger {
             background: transparent;
             color: #ef4444;
             border: 1px solid rgba(239, 68, 68, 0.3);
         }
 
-        .btn-quit:hover {
+        .btn-danger:hover {
             background: rgba(239, 68, 68, 0.1);
-            border-color: #ef4444;
         }
 
         /* Spinner */
@@ -199,6 +262,19 @@
             to {
                 transform: rotate(360deg);
             }
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 32px;
+            text-align: center;
+        }
+
+        .footer-text {
+            font-size: 12px;
+            color: #888888;
+            opacity: 0.8;
+            font-weight: 500;
         }
 
         /* Notification Toast */
@@ -228,9 +304,9 @@
         }
 
         .notification.success {
-            border-color: #128b3e;
+            border-color: #22c55e;
             background: rgba(34, 197, 94, 0.15);
-            color: #137537;
+            color: #22c55e;
         }
 
         .notification.error {
@@ -240,164 +316,154 @@
         }
 
         .notification.info {
-            border-color: #cf6716;
-            background: rgba(207, 103, 22, 0.15);
-            color: #cf6716;
-        }
-
-        /* Footer */
-        .footer {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            text-align: center;
-            padding: 12px 24px;
-            border-top: 1px solid rgba(255, 255, 255, 0.05);
-            background: #0a0a0a;
-        }
-
-        .footer-text {
-            font-size: 11px;
-            color: #666666;
-        }
-
-        /* Icon placeholders */
-        .icon {
-            width: 16px;
-            height: 16px;
+            border-color: #ff6600;
+            background: rgba(255, 102, 0, 0.15);
+            color: #ff6600;
         }
     </style>
 </head>
 
 <body>
     <div class="container">
+        <!-- Header -->
         <div class="header">
-            <h1>Control panel</h1>
+            <div class="logo">
+                <span class="material-icons">grid_view</span>
+            </div>
+            <h1 class="title">Control panel</h1>
+            <span class="version-badge" id="agent-version">v1.0.38</span>
         </div>
 
-        <div class="status-card">
-            <div class="status-item">
-                <span class="status-label">Version</span>
-                <span class="status-value" id="agent-version">Cargando...</span>
-            </div>
-            <div class="status-item">
+        <!-- Card -->
+        <div class="card">
+            <!-- Status -->
+            <div class="status-section">
                 <span class="status-label">Estado</span>
-                <span class="status-badge online" id="agent-status">
-                    Online
-                </span>
+                <div class="status-badge" id="status-container">
+                    <div class="status-dot"></div>
+                    <span class="status-text" id="agent-status">Online</span>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="actions">
+                <button class="btn btn-primary" id="btn-restart">
+                    <span class="material-icons">restart_alt</span>
+                    <span>Reiniciar</span>
+                </button>
+
+                <button class="btn btn-secondary" id="btn-update">
+                    <span id="update-btn-text">
+                        <span class="material-icons">system_update_alt</span>
+                        <span>Buscar Actualización</span>
+                    </span>
+                    <span id="update-spinner" class="spinner" style="display: none;"></span>
+                </button>
+
+                <button class="btn btn-danger" id="btn-quit">
+                    <span class="material-icons">power_settings_new</span>
+                    <span>Cerrar App</span>
+                </button>
             </div>
         </div>
 
-        <div class="actions">
-            <button class="btn-restart" id="btn-restart">
-                Reiniciar
-            </button>
-            <button class="btn-update" id="btn-update">
-                <span id="update-btn-text">Buscar Actualización</span>
-                <span id="update-spinner" class="spinner" style="display: none;"></span>
-            </button>
-            <button class="btn-quit" id="btn-quit">
-                Cerrar App
-            </button>
+        <!-- Footer -->
+        <div class="footer">
+            <div class="footer-text">ScreensWeb Agent © <span id="current-year"></span></div>
         </div>
     </div>
 
     <!-- Notification Toast -->
     <div id="notification" class="notification"></div>
 
-    <div class="footer">
-        <div class="footer-text">ScreensWeb Agent © <span id="current-year"></span></div>
-    </div>
-
     <script>
         document.getElementById('current-year').textContent = new Date().getFullYear();
+
         // Interfaz Electron
         window.electron.onAgentInfo((info) => {
             document.getElementById('agent-version').textContent = 'v' + info.version;
 
-            const statusBadge = document.getElementById('agent-status');
-            statusBadge.textContent = info.status;
+            const statusBadge = document.getElementById('status-container');
+            const statusText = document.getElementById('agent-status');
 
-            if (info.status.toLowerCase() === 'online') {
-                statusBadge.className = 'status-badge online';
+            if (info.status === 'Online') {
+                statusBadge.classList.remove('offline');
+                statusText.textContent = 'Online';
             } else {
-                statusBadge.className = 'status-badge offline';
+                statusBadge.classList.add('offline');
+                statusText.textContent = info.status;
             }
         });
 
-        document.getElementById('btn-restart').onclick = () => {
+        // Botón reiniciar
+        document.getElementById('btn-restart').addEventListener('click', () => {
             if (confirm('¿Seguro que quieres reiniciar el agente?')) {
-                window.electron.sendAction('restart-agent');
+                window.electron.sendAction('restart');
             }
-        };
+        });
 
-        let isCheckingUpdate = false;
+        // Botón cerrar
+        document.getElementById('btn-quit').addEventListener('click', () => {
+            if (confirm('¿Seguro que quieres cerrar el agente?')) {
+                window.electron.sendAction('quit');
+            }
+        });
 
-        function showNotification(message, type = 'info') {
-            const notification = document.getElementById('notification');
-            notification.textContent = message;
-            notification.className = `notification ${type}`;
+        // Botón actualizar
+        const updateBtn = document.getElementById('btn-update');
+        const updateBtnText = document.getElementById('update-btn-text');
+        const updateSpinner = document.getElementById('update-spinner');
 
-            setTimeout(() => notification.classList.add('show'), 10);
+        updateBtn.addEventListener('click', () => {
+            // Mostrar spinner y deshabilitar botón
+            updateBtnText.style.display = 'none';
+            updateSpinner.style.display = 'inline-block';
+            updateBtn.disabled = true;
 
-            setTimeout(() => {
-                notification.classList.remove('show');
-            }, 4000);
-        }
-
-        document.getElementById('btn-update').onclick = () => {
-            if (isCheckingUpdate) return;
-
-            isCheckingUpdate = true;
-            const btn = document.getElementById('btn-update');
-            const btnText = document.getElementById('update-btn-text');
-            const spinner = document.getElementById('update-spinner');
-
-            btn.disabled = true;
-            btnText.style.display = 'none';
-            spinner.style.display = 'inline-block';
-
+            // Enviar comando
             window.electron.sendAction('check-update');
 
-            // Auto re-enable after 10 seconds as safety
+            // Re-habilitar después de 10 segundos (seguridad)
             setTimeout(() => {
-                if (isCheckingUpdate) {
-                    isCheckingUpdate = false;
-                    btn.disabled = false;
-                    btnText.style.display = 'inline';
-                    spinner.style.display = 'none';
-                }
+                updateBtnText.style.display = 'flex';
+                updateBtnText.style.alignItems = 'center';
+                updateBtnText.style.gap = '8px';
+                updateSpinner.style.display = 'none';
+                updateBtn.disabled = false;
             }, 10000);
-        };
-
-        // Listen for update status
-        window.electron.onUpdateStatus((status) => {
-            isCheckingUpdate = false;
-            const btn = document.getElementById('btn-update');
-            const btnText = document.getElementById('update-btn-text');
-            const spinner = document.getElementById('update-spinner');
-
-            btn.disabled = false;
-            btnText.style.display = 'inline';
-            spinner.style.display = 'none';
-
-            if (status.status === 'up-to-date') {
-                showNotification(status.message, 'success');
-            } else if (status.status === 'downloading') {
-                showNotification(status.message, 'info');
-            } else if (status.status === 'downloaded') {
-                showNotification(status.message, 'success');
-            } else if (status.status === 'error') {
-                showNotification(status.message, 'error');
-            }
         });
 
-        document.getElementById('btn-quit').onclick = () => {
-            if (confirm('¿Seguro que quieres cerrar el agente?')) {
-                window.electron.sendAction('quit-agent');
+        // Escuchar eventos de actualización
+        window.electron.onUpdateStatus((status) => {
+            const notification = document.getElementById('notification');
+
+            // Configurar notificación según el estado
+            if (status.type === 'up-to-date') {
+                notification.textContent = 'App en la última versión';
+                notification.className = 'notification success show';
+            } else if (status.type === 'downloading') {
+                notification.textContent = `Descargando actualización...`;
+                notification.className = 'notification info show';
+            } else if (status.type === 'downloaded') {
+                notification.textContent = 'Actualización descargada. Reiniciando...';
+                notification.className = 'notification success show';
+            } else if (status.type === 'error') {
+                notification.textContent = 'Error al buscar actualización';
+                notification.className = 'notification error show';
             }
-        };
+
+            // Re-habilitar botón inmediatamente cuando hay respuesta
+            updateBtnText.style.display = 'flex';
+            updateBtnText.style.alignItems = 'center';
+            updateBtnText.style.gap = '8px';
+            updateSpinner.style.display = 'none';
+            updateBtn.disabled = false;
+
+            // Ocultar notificación después de 6 segundos
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 6000);
+        });
     </script>
 </body>
 

@@ -80,8 +80,8 @@ function openControlWindow(serverUrl, version) {
     }
 
     controlWindow = new BrowserWindow({
-        width: 380,
-        height: 500,
+        width: 420,
+        height: 580,
         title: 'ScreensWeb Control',
         icon: path.join(__dirname, '..', 'icons', 'icon.png'),
         frame: true,
