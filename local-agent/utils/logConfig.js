@@ -13,6 +13,50 @@ const path = require('path');
 log.transports.file.level = 'info';
 log.transports.console.level = 'debug';
 
+// Hook para enviar errores al servidor central
+log.hooks.push((message, transport) => {
+    if (transport !== log.transports.file) return message;
+    if (message.level !== 'error' && message.level !== 'warn') return message;
+
+    try {
+        const { SERVER_URL, AGENT_VERSION } = require('../config/constants');
+        const { loadConfig } = require('./configManager');
+        const { net } = require('electron');
+
+        if (!SERVER_URL) return message;
+
+        const config = loadConfig();
+        if (!config.deviceId || !config.agentToken) return message;
+
+        const logData = {
+            level: message.level,
+            message: message.data.map(d => (typeof d === 'object' ? JSON.stringify(d) : d)).join(' '),
+            deviceId: config.deviceId,
+            agentVersion: AGENT_VERSION,
+            timestamp: new Date().toISOString()
+        };
+
+        const request = net.request({
+            method: 'POST',
+            url: `${SERVER_URL}/api/logs`,
+            useSessionCookies: false
+        });
+
+        request.setHeader('Content-Type', 'application/json');
+        request.setHeader('Authorization', `Bearer ${config.agentToken}`);
+
+        request.on('error', () => { /* Silenciar errores de envío para evitar bucles */ });
+
+        request.write(JSON.stringify(logData));
+        request.end();
+
+    } catch (e) {
+        // Ignorar errores en el hook de logging
+    }
+
+    return message;
+});
+
 // Rotación automática
 log.transports.file.maxSize = 10 * 1024 * 1024;
 log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}';
@@ -68,7 +112,7 @@ const heartbeatLog = {
         const now = Date.now();
 
         if (this._counter % 10 === 0 || now - this._lastLog > 5 * 60 * 1000) {
-            log.debug(`[HEARTBEAT]: Latidos enviados (últimos 5 min): ${this._counter % 10 || 10}`);
+            log.debug(`[HEARTBEAT]: Latidos enviados (ultimos 5 min): ${this._counter % 10 || 10}`);
             this._lastLog = now;
         }
     }

@@ -48,6 +48,9 @@ Sus funciones son:
 - 💾 **Soporte offline**: muestra archivos locales (assets) sincronizados desde la plataforma central.
 - 🧠 **Persistencia de estado por posición**: Recuerda la URL asignada a cada monitor según su orden físico (pantalla 1, pantalla 2...).
 - 🔐 **Validación de comandos**: los datos recibidos se validan con **Zod** antes de ser ejecutados.
+- 📝 **Logging Centralizado**: Envía errores críticos al servidor central automáticamente.
+- 🛡️ **Configuración Segura**: Almacena el token y configuración encriptados usando `electron-store`.
+
 
 ---
 
@@ -78,6 +81,8 @@ Sus funciones son:
 - **Socket.IO Client**
 - **electron-updater**
 - **electron-builder**
+- **electron-store** (v8.1.0 para compatibilidad CommonJS)
+
 - **Zod** (validación de mensajes/comandos)
 - HTML / CSS / JS para las vistas (`provision`, `identify`, `display`, etc.)
 
@@ -115,6 +120,16 @@ const SERVER_URL = process.env.SCREENS_SERVER_URL || "http://localhost:3000";
 ```
 
 La URL tiene que apuntar a la instancia correcta del backend (entorno dev, pre, prod, etc.).
+
+---
+
+## ⚙ Configuración Segura
+
+El agente utiliza `electron-store` para guardar la configuración de forma segura (encriptada) en `config.json`.
+- **Ubicación**: `%APPDATA%\local-agent\config.json` (en Windows).
+- **Contenido**: `deviceId`, `agentToken` (encriptado).
+
+> **Nota**: Si necesitas resetear la configuración, borra este archivo manualmente y reinicia el agente para volver al **Modo Vinculación**.
 
 ---
 
@@ -261,5 +276,11 @@ screensWeb-agent/
 - Verificar que el `deviceId` se ha registrado correctamente en el panel web.
 - Revisar si el backend está enviando el evento de éxito de provisión.
 - Comprobar logs del backend para ver si se ha recibido el `deviceId`.
+
+### Token Inválido o "invalid signature"
+
+- Si ves muchos logs de `invalid signature` en el backend, es probable que la configuración local del agente esté corrupta o no encriptada correctamente.
+- **Solución**: Borra el archivo `config.json` en el agente y vuelve a vincularlo.
+
 
 ---

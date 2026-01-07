@@ -2,7 +2,6 @@
 node_modules/
 
 # Construcción y Empaquetado de Electron
-
 dist/
 release/
 out/
@@ -18,7 +17,6 @@ build/
 .env
 .env.*
 !.env.example
-luckia-config.json
 config.json
 
 # Archivos de log

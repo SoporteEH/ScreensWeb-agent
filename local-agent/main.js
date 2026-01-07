@@ -581,8 +581,8 @@ try {
         errWin.setMenu(null);
         errWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`
             <body style="background:#1a1a1a;color:#ff6600;font-family:sans-serif;padding:30px;text-align:center">
-                <h2 style="margin-bottom:10px">⚠️ Modo Autoreparación</h2>
-                <p style="color:#ccc;margin-bottom:20px">El agente ha encontrado un error y se está intentando auto-corregir descargando una nueva versión.</p>
+                <h2 style="margin-bottom:10px">Modo reparación</h2>
+                <p style="color:#ccc;margin-bottom:20px">El agente ha encontrado un error y se está intentando corregir descargando una nueva versión.</p>
                 <div style="background:#000;padding:15px;border-radius:8px;text-align:left;font-family:monospace;font-size:11px;color:#ef4444;height:120px;overflow:auto;border:1px solid #333">
                     ${bootstrapError.stack || bootstrapError.message}
                 </div>

@@ -1,55 +1,50 @@
 /**
- * Gestión de configuración del agente
- * 
- * Maneja la carga y guardado de la configuración del dispositivo.
+ * Gestión de configuración del agente con electron-store
  */
-
-const fs = require('fs');
+const Store = require('electron-store');
 const { log } = require('./logConfig');
-const { CONFIG_DIR, CONFIG_FILE_PATH } = require('../config/constants');
+
+// Configuración de electron-store
+const store = new Store({
+    name: 'config',
+    encryptionKey: 'screensweb-agent-secure-key',
+    clearInvalidConfig: true
+});
 
 /**
- * Carga la configuración del agente desde un archivo JSON.
- * @returns {object} El objeto de configuración o un objeto vacío si falla.
+ * Carga la configuración del agente.
+ * @returns {object} El objeto de configuración.
  */
 function loadConfig() {
     try {
-        if (fs.existsSync(CONFIG_FILE_PATH)) {
-            const data = fs.readFileSync(CONFIG_FILE_PATH, 'utf8');
-            return JSON.parse(data);
-        }
+        return store.store;
     } catch (error) {
-        log.error('[CONFIG]: Error al leer/parsear el archivo de configuracion:', error);
+        log.error('[CONFIG]: Error al leer configuración:', error);
+        return {};
     }
-    return {};
 }
 
 /**
- * Guarda el objeto de configuración en un archivo JSON.
- * @param {object} config - El objeto de configuración a guardar.
+ * Guarda el objeto de configuración.
+ * @param {object} config - El objeto a guardar.
  */
 function saveConfig(config) {
     try {
-        if (!fs.existsSync(CONFIG_DIR)) {
-            fs.mkdirSync(CONFIG_DIR, { recursive: true });
-        }
-        fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(config, null, 2));
+        store.set(config);
     } catch (error) {
-        log.error('[CONFIG]: Error al guardar la configuracion:', error);
+        log.error('[CONFIG]: Error al guardar configuración:', error);
     }
 }
 
 /**
- * Elimina la configuración (para forzar modo provisioning)
+ * Elimina la configuración.
  */
 function deleteConfig() {
     try {
-        if (fs.existsSync(CONFIG_FILE_PATH)) {
-            fs.unlinkSync(CONFIG_FILE_PATH);
-            log.info('[CONFIG]: Configuracion eliminada.');
-        }
+        store.clear();
+        log.info('[CONFIG]: Configuración eliminada del store.');
     } catch (error) {
-        log.error('[CONFIG]: Error al eliminar configuracion:', error);
+        log.error('[CONFIG]: Error al limpiar configuración:', error);
     }
 }
 
