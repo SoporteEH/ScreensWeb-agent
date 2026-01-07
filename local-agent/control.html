@@ -130,10 +130,9 @@
         }
 
         .version-badge {
-            font-size: 10px;
-            color: #666666;
-            font-weight: 500;
-            opacity: 0.6;
+            font-size: 13px;
+            color: #aaaaaa;
+            font-weight: 600;
             margin-top: -4px;
         }
 
@@ -189,7 +188,7 @@
             position: absolute;
             width: 100%;
             height: 100%;
-            background: #22c55e;
+            background: #1d9248;
             border-radius: 50%;
             animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
             opacity: 0.75;
@@ -200,7 +199,7 @@
             position: absolute;
             width: 100%;
             height: 100%;
-            background: #22c55e;
+            background: #1d9248;
             border-radius: 50%;
         }
 
@@ -221,7 +220,7 @@
         .status-text {
             font-size: 12px;
             font-weight: 600;
-            color: #22c55e;
+            color: #1da850;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
@@ -341,7 +340,7 @@
         /* Notification Toast */
         .notification {
             position: fixed;
-            bottom: 70px;
+            bottom: 95px;
             left: 50%;
             transform: translateX(-50%) translateY(100px);
             background: #1a1a1a;
@@ -380,6 +379,107 @@
             border-color: #ff6600;
             background: rgba(255, 102, 0, 0.15);
             color: #ff6600;
+        }
+
+        /* Custom Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal {
+            background: #2c2c2c;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 340px;
+            width: 90%;
+            border: 1px solid #3d3d3d;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            animation: modalSlideIn 0.2s ease-out;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 12px;
+        }
+
+        .modal-message {
+            font-size: 14px;
+            color: #888888;
+            line-height: 1.5;
+            margin-bottom: 24px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .modal-btn {
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            font-family: inherit;
+        }
+
+        .modal-btn-cancel {
+            background: transparent;
+            color: #888888;
+            border: 1px solid #3d3d3d;
+        }
+
+        .modal-btn-cancel:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: #ffffff;
+        }
+
+        .modal-btn-confirm {
+            background: #ff6600;
+            color: white;
+        }
+
+        .modal-btn-confirm:hover {
+            background: #e65c00;
+        }
+
+        .modal-btn-confirm.danger {
+            background: #ef4444;
+        }
+
+        .modal-btn-confirm.danger:hover {
+            background: #dc2626;
         }
     </style>
 </head>
@@ -452,8 +552,68 @@
     <!-- Notification Toast -->
     <div id="notification" class="notification"></div>
 
+    <!-- Custom Modal -->
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-title" id="modal-title"></div>
+            <div class="modal-message" id="modal-message"></div>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-btn-cancel" id="modal-cancel">Cancelar</button>
+                <button class="modal-btn modal-btn-confirm" id="modal-confirm">Aceptar</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         document.getElementById('current-year').textContent = new Date().getFullYear();
+
+        // Sistema de modal personalizado
+        let modalCallback = null;
+        const modalOverlay = document.getElementById('modal-overlay');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const modalConfirmBtn = document.getElementById('modal-confirm');
+        const modalCancelBtn = document.getElementById('modal-cancel');
+
+        function showModal(title, message, confirmText = 'Aceptar', isDanger = false) {
+            return new Promise((resolve) => {
+                modalTitle.textContent = title;
+                modalMessage.textContent = message;
+                modalConfirmBtn.textContent = confirmText;
+
+                // Aplicar estilo danger si es necesario
+                if (isDanger) {
+                    modalConfirmBtn.classList.add('danger');
+                } else {
+                    modalConfirmBtn.classList.remove('danger');
+                }
+
+                modalOverlay.classList.add('show');
+                modalCallback = resolve;
+            });
+        }
+
+        function hideModal() {
+            modalOverlay.classList.remove('show');
+        }
+
+        modalConfirmBtn.addEventListener('click', () => {
+            hideModal();
+            if (modalCallback) modalCallback(true);
+        });
+
+        modalCancelBtn.addEventListener('click', () => {
+            hideModal();
+            if (modalCallback) modalCallback(false);
+        });
+
+        // Cerrar modal al hacer click fuera
+        modalOverlay.addEventListener('click', (e) => {
+            if (e.target === modalOverlay) {
+                hideModal();
+                if (modalCallback) modalCallback(false);
+            }
+        });
 
         // Interfaz Electron
         window.electron.onAgentInfo((info) => {
@@ -472,15 +632,26 @@
         });
 
         // Botón reiniciar
-        document.getElementById('btn-restart').addEventListener('click', () => {
-            if (confirm('¿Seguro que quieres reiniciar el agente?')) {
+        document.getElementById('btn-restart').addEventListener('click', async () => {
+            const confirmed = await showModal(
+                'Reiniciar',
+                'La aplicación se cerrará y volverá a iniciarse automáticamente.',
+                'Reiniciar'
+            );
+            if (confirmed) {
                 window.electron.sendAction('restart');
             }
         });
 
         // Botón cerrar
-        document.getElementById('btn-quit').addEventListener('click', () => {
-            if (confirm('¿Seguro que quieres cerrar el agente?')) {
+        document.getElementById('btn-quit').addEventListener('click', async () => {
+            const confirmed = await showModal(
+                'Cerrar',
+                'La aplicación se cerrará completamente.',
+                'Cerrar',
+                true
+            );
+            if (confirmed) {
                 window.electron.sendAction('quit');
             }
         });
