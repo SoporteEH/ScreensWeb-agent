@@ -1,8 +1,6 @@
 /**
- * Gestión de GPU y aceleración de hardware
- * 
- * Detecta automáticamente si la GPU funciona correctamente y
- * cambia a renderizado por software si es necesario.
+ * GPU Management Service
+ * Detecta y gestiona aceleración por hardware
  */
 
 const { app } = require('electron');
@@ -19,7 +17,7 @@ function hasGpuFailed() {
             const config = JSON.parse(fs.readFileSync(GPU_CONFIG_FILE, 'utf8'));
             return config.gpuFailed === true;
         }
-    } catch (e) { /* Ignora errores de lectura */ }
+    } catch (e) { }
     return false;
 }
 
@@ -33,28 +31,28 @@ function markGpuAsFailed() {
     }
 }
 
-// Resetea el estado de GPU (para pruebas o después de actualizar drivers)
+
 function resetGpuState() {
     try {
         if (fs.existsSync(GPU_CONFIG_FILE)) {
             fs.unlinkSync(GPU_CONFIG_FILE);
         }
-    } catch (e) { /* Ignorar */ }
+    } catch (e) { }
 }
 
-// Configura GPU según disponibilidad
+
 function configureGpu() {
     if (hasGpuFailed()) {
         log.info('[GPU]: GPU marcada como fallida anteriormente. Usando renderizado por software.');
         app.disableHardwareAcceleration();
     } else {
         log.info('[GPU]: Usando aceleracion de hardware...');
-        // Solo habilita opciones seguras
+
         app.commandLine.appendSwitch('enable-gpu-rasterization');
     }
 }
 
-// Optimizaciones de memoria
+
 function configureMemory() {
     app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
     app.commandLine.appendSwitch('disk-cache-size', '10485760'); // 10MB
@@ -65,7 +63,7 @@ function configureMemory() {
     app.commandLine.appendSwitch('disable-background-networking');
 }
 
-// Registra listeners para detectar crash de GPU
+
 function registerGpuCrashHandlers() {
     app.on('gpu-process-crashed', (event, killed) => {
         log.error(`[GPU]: Proceso GPU crasheo (killed: ${killed}). Marcando para fallback.`);

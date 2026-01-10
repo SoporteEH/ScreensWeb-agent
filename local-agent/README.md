@@ -1,286 +1,280 @@
-# 🖥️ ScreensWeb Agent (Electron)
+# ScreensWeb Agent
 
-Aplicación de escritorio para Windows instalada en PCs de salones.  
-Se conecta a la **plataforma central** de ScreensWeb mediante WebSockets y muestra contenido en una o varias pantallas físicas.
+Desktop application for Windows-based digital signage systems. Connects to the ScreensWeb central platform via WebSockets and manages content display across multiple physical screens.
 
+## Table of Contents
 
----
+- [Overview](#overview)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Technology Stack](#technology-stack)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Development](#development)
+- [Build and Distribution](#build-and-distribution)
+- [Auto-Update System](#auto-update-system)
+- [Project Structure](#project-structure)
+- [Troubleshooting](#troubleshooting)
 
-## 📋 Tabla de Contenidos
+## Overview
 
-- [🧩 Descripción General](#-descripción-general)
-- [✨ Características](#-características)
-- [🏗 Arquitectura](#-arquitectura)
-- [🛠 Tecnologías](#-tecnologías)
-- [📦 Requisitos Previos](#-requisitos-previos)
-- [📥 Instalación](#-instalación)
-- [⚙ Configuración](#-configuración)
-- [🚀 Modo Desarrollo](#-modo-desarrollo)
-- [🏭 Build y Distribución](#-build-y-distribución)
-- [🔄 Auto-Actualización (CI/CD)](#-auto-actualización-cicd)
-- [🆔 Flujo de Vinculación Inicial](#-flujo-de-vinculación-inicial)
-- [📁 Estructura del Proyecto](#-estructura-del-proyecto)
-- [Troubleshooting](#-troubleshooting)
+The ScreensWeb Agent is installed on venue PCs to display dynamic content on one or more screens. It maintains a persistent WebSocket connection to the central platform and executes remote commands in real-time.
 
----
+**Core Responsibilities:**
+- Establish and maintain WebSocket connection to ScreensWeb backend
+- Receive and execute commands (display URL, show local assets, close content, identify screens)
+- Detect and manage multiple physical displays
+- Display content in full-screen kiosk mode
+- Handle connection failures with automatic reconnection
+- Auto-update from GitHub Releases using electron-updater
 
-## 🧩 Descripción General
+## Features
 
-El agente es el componente instalado en los PCs de los salones. 
-Sus funciones son:
+**Multi-Monitor Support**
+- Automatic detection of physical displays
+- Predictable screen IDs (1, 2, 3) ordered left-to-right
+- Independent content management per screen
+- Position-based state persistence
 
-- Conectarse al backend de ScreensWeb mediante **WebSockets seguros (WSS)**.
-- Recibir comandos (mostrar URL, mostrar asset local, cerrar contenido, identificar pantalla, etc.).
-- Detectar y gestionar múltiples pantallas.
-- Mostrar contenido en modo kiosko.
-- Mantener la conexión y reintentar reconexiones ante cortes.
-- Auto-actualizarse desde GitHub Releases utilizando `electron-updater`.
+**Connectivity**
+- WebSocket connection with automatic reconnection
+- Offline operation with fallback content
+- Network monitoring and recovery
+- Centralized error logging to backend
 
----
+**Auto-Update**
+- CI/CD integration with GitHub Actions
+- Silent installation of updates
+- Version rollback support
+- Zero-downtime updates
 
-## ✨ Características
+**Security**
+- Encrypted configuration storage using electron-store
+- JWT-based authentication
+- Command validation with Zod schemas
+- Secure token refresh mechanism
 
-- 🖥️ **Multi-monitor**: una ventana por pantalla física.
-- 🔄 **Auto-actualización**: integración con CI/CD (tags + GitHub Actions + electron-updater).
-- 📡 **Conexión en tiempo real**: WebSockets con reconexión automática.
-- 🧱 **Modo kiosko**: pantalla completa, sin barras ni menús.
-- 🆔 **Identificación predecible**: Asigna IDs simples ("1", "2", "3") ordenados de izquierda a derecha.
-- 💾 **Soporte offline**: muestra archivos locales (assets) sincronizados desde la plataforma central.
-- 🧠 **Persistencia de estado por posición**: Recuerda la URL asignada a cada monitor según su orden físico (pantalla 1, pantalla 2...).
-- 🔐 **Validación de comandos**: los datos recibidos se validan con **Zod** antes de ser ejecutados.
-- 📝 **Logging Centralizado**: Envía errores críticos al servidor central automáticamente.
-- 🛡️ **Configuración Segura**: Almacena el token y configuración encriptados usando `electron-store`.
+**Asset Management**
+- Local asset synchronization from central platform
+- Offline content playback capability
+- Automatic cleanup of obsolete files
 
+## Architecture
 
----
-
-## 🏗 Arquitectura
-
-```txt
+```
 ┌─────────────────────────────┐
-│  Backend ScreensWeb         │
+│  ScreensWeb Backend         │
 │  (API + Socket.IO Server)   │
 └──────────────┬──────────────┘
-               │ WebSocket (WSS)
+               │ WebSocket (WSS/WS)
 ┌──────────────▼──────────────┐
 │     ScreensWeb Agent        │
 │     (Electron App)          │
+├─────────────────────────────┤
+│  Main Process               │
+│  - Connection Management    │
+│  - Command Handling         │
+│  - State Persistence        │
+├─────────────────────────────┤
+│  Renderer Processes         │
+│  - Content Windows          │
+│  - Identify Overlay         │
+│  - Provisioning UI          │
 └──────────────┬──────────────┘
-               │ Renderizado
+               │ Display Output
 ┌──────────────▼──────────────┐
-│    Monitores físicos        │
+│    Physical Monitors        │
 └─────────────────────────────┘
 ```
 
----
+## Technology Stack
 
-## 🛠 Tecnologías
+**Core:**
+- Electron 38.x
+- Node.js 18+
+- Socket.IO Client 4.x
 
-- **Electron** (proceso principal + ventanas de render)
-- **Node.js 18+**
-- **Socket.IO Client**
-- **electron-updater**
-- **electron-builder**
-- **electron-store** (v8.1.0 para compatibilidad CommonJS)
+**Build & Distribution:**
+- electron-builder 24.x
+- electron-updater 6.x
+- GitHub Actions
 
-- **Zod** (validación de mensajes/comandos)
-- HTML / CSS / JS para las vistas (`provision`, `identify`, `display`, etc.)
+**Storage & Security:**
+- electron-store 8.1.0 (CommonJS compatible)
+- JWT authentication
+- Zod schema validation
 
----
+**Development:**
+- electron-log for logging
+- dotenv for environment configuration
 
-## 📦 Requisitos Previos
+## Requirements
 
-- **Sistema operativo**: Windows 10 / 11
-- **Node.js** 18+ (para desarrollo)
-- **npm** 9+ (para desarrollo)
+**Production (End User):**
+- Windows 10/11 (64-bit)
+- Network connectivity to ScreensWeb backend
 
-> Para el usuario final del salón solo importa el instalador `.exe`.
+**Development:**
+- Windows 10/11
+- Node.js 18+
+- npm 9+
+- Git
 
----
+## Installation
 
-## 📥 Instalación
-
-Clonar el repo e instalar dependencias:
+### Development Setup
 
 ```bash
-cd screensWeb-agent
+git clone <repository-url>
+cd ScreensWeb-agent/local-agent
 npm install
 ```
 
----
+### Production Installation
 
-## ⚙ Configuración
+Download the latest `.exe` installer from GitHub Releases and run it. The agent will:
+1. Install to `Program Files/ScreensWeb Agent`
+2. Create desktop shortcut
+3. Configure auto-start with Windows
+4. Launch provisioning mode on first run
 
-El agente necesita saber la **URL del servidor central** (por ejemplo, `https://screensweb.midominio.com` o `http://localhost:3000` en entorno de pruebas).
+## Configuration
 
+The agent requires the backend server URL for operation.
 
-```js
+### Development Configuration
 
-const SERVER_URL = process.env.SCREENS_SERVER_URL || "http://localhost:3000";
+Create a `.env` file in the `local-agent` directory:
+
+```env
+SERVER_URL=http://localhost:3000
 ```
 
-La URL tiene que apuntar a la instancia correcta del backend (entorno dev, pre, prod, etc.).
+### Production Configuration
 
----
+For production builds, the `SERVER_URL` is injected during the build process via `package.json` `extraMetadata` or GitHub Secrets.
 
-## ⚙ Configuración Segura
+### Configuration Storage
 
-El agente utiliza `electron-store` para guardar la configuración de forma segura (encriptada) en `config.json`.
-- **Ubicación**: `%APPDATA%\local-agent\config.json` (en Windows).
-- **Contenido**: `deviceId`, `agentToken` (encriptado).
+The agent stores its configuration in `electron-store`:
+- **Location:** `%APPDATA%\local-agent\ScreensWeb\config.json`
+- **Content:** `deviceId`, `agentToken` (encrypted)
+- **Reset:** Delete this file to return to provisioning mode
 
-> **Nota**: Si necesitas resetear la configuración, borra este archivo manualmente y reinicia el agente para volver al **Modo Vinculación**.
+## Development
 
----
-
-## 🚀 Modo Desarrollo
-
-Para arrancar el agente en modo desarrollo:
+Start the agent in development mode:
 
 ```bash
 npm start
 ```
 
-Comportamiento esperado:
+**Expected Behavior:**
+- **First Run:** Launches in Provisioning Mode, displays device ID for linking
+- **Configured:** Launches in Normal Mode, connects to backend automatically
 
-- Si es la **primera vez** y no hay `deviceId` configurado:
-  - El agente arranca en **Modo Vinculación** y muestra un ID de máquina.
-- Si ya está vinculado:
-  - El agente arranca directamente en **Modo Normal** y se conecta al servidor.
+**Development Tools:**
+- DevTools enabled in development mode
+- Hot reload not supported (requires app restart)
+- Logs written to console and file (`%APPDATA%\local-agent\ScreensWeb\logs\`)
 
----
+## Build and Distribution
 
-## 🏭 Build y Distribución
-
-Para generar el instalador de Windows:
+Generate the Windows installer:
 
 ```bash
 npm run build
 ```
 
-Esto creará la carpeta `dist/` con:
+**Output:**
+- `dist/ScreensWebAgent-Setup-1.x.x.exe` - NSIS installer
+- `dist/latest.yml` - Update metadata for electron-updater
+- `dist/win-unpacked/` - Unpacked application files
 
-- Un instalador `.exe` (`ScreensWeb Agent Setup 1.0.0.exe`).
-- Archivos de metadatos (`latest.yml`), usados por `electron-updater`.
+## Auto-Update System
 
-Este `.exe` es el que se distribuye e instala en los PCs de los salones.
+The agent uses `electron-updater` for seamless updates.
 
----
+### Release Process (Developer)
 
-## 🔄 Auto-Actualización (CI/CD)
+1. Update version in `package.json`:
+   ```json
+   {
+     "version": "1.0.2"
+   }
+   ```
 
-El agente utiliza `electron-updater` para descargar e instalar nuevas versiones automáticamente.
+2. Commit and create a git tag:
+   ```bash
+   git add package.json
+   git commit -m "Bump version to 1.0.2"
+   git tag v1.0.2
+   git push origin main --tags
+   ```
 
-### 🔧 Flujo (desarrollador)
+3. GitHub Actions automatically:
+   - Builds the application
+   - Generates installer and `latest.yml`
+   - Creates a GitHub Release with artifacts
 
-1. Realizar cambios en el código del agente.
-2. Incrementar la versión en `package.json` (`1.0.1` a `1.0.2`).
-3. Crear un tag de Git que coincida con la versión:
+### Update Process (Agent)
 
-```bash
-git tag v1.0.2
+1. Agent checks for updates periodically (configurable interval)
+2. Detects new version from `latest.yml`
+3. Downloads installer in background
+4. Prompts user or auto-installs (configurable)
+5. Restarts with new version
+
+**Configuration:**
+- Check interval: 4 hours (default)
+- Silent mode: enabled for production
+- Rollback: manual via GitHub Release
+
+## Project Structure
+
+```
+local-agent/
+├── config/
+│   └── constants.js           # Centralized configuration (URLs, timeouts, paths)
+├── handlers/
+│   ├── commands.js            # Remote command handlers (show_url, close_screen, etc.)
+│   └── provisioning.js        # Device provisioning flow
+├── services/
+│   ├── assets.js              # Local asset synchronization
+│   ├── auth.js                # JWT token refresh
+│   ├── device.js              # Device registration and system commands
+│   ├── gpu.js                 # GPU configuration and crash handling
+│   ├── network.js             # Network connectivity monitoring
+│   ├── socket.js              # WebSocket connection management
+│   ├── state.js               # Screen state persistence
+│   ├── tray.js                # System tray icon and menu
+│   └── updater.js             # Auto-update orchestration
+├── utils/
+│   ├── configManager.js       # Configuration file management
+│   └── logConfig.js           # Logging configuration
+├── icons/                     # Application icons
+├── main.js                    # Main process orchestrator
+├── preload.js                 # Preload script for renderer security
+├── identify-preload.js        # Preload for screen identification
+├── control.html               # Control panel UI
+├── fallback.html              # Offline fallback page
+├── identify.html              # Screen identification overlay
+├── provision.html             # Provisioning mode UI
+├── package.json               # Project metadata and Electron config
+└── README.md                  # This file
 ```
 
-4. GitHub Actions:
-   - Compila el agente.
-   - Genera el instalador `.exe` y el `latest.yml`.
-   - Publica una **Release** con ambos ficheros.
+### Architecture Layers
 
-### 💻 Flujo (agente instalado en el salón)
+| Layer | Responsibility |
+|-------|----------------|
+| **main.js** | Application orchestration, event coordination |
+| **services/** | Independent modules with single responsibility |
+| **handlers/** | Command execution and user flows |
+| **config/** | Centralized constants and configuration |
+| **utils/** | Reusable utilities |
 
-1. El agente instalado (por ejemplo, `v1.0.1`) arranca en un PC de salón.
-2. `electron-updater` consulta periódicamente las actualizaciones.
-3. Detecta que existe la versión `v1.0.2`.
-4. Descarga el nuevo instalador en segundo plano.
-5. Lanza `quitAndInstall`:
-   - Cierra la app.
-   - Ejecuta el instalador en modo silencioso.
-   - Reinicia el agente con la nueva versión `v1.0.2`.
+## License
 
-Todo el proceso es en segundo plano.
-
----
-
-
-## 📁 Estructura del Proyecto
-
-```txt
-screensWeb-agent/
-├── .github/
-│   └── workflows/
-│       └── release-agent.yml          # Workflow CI/CD para actualización
-├── build/                             # Iconos para el instalador
-└── local-agent/
-    ├── config/
-    │   └── constants.js               # Configuración centralizada (URLs, timeouts, rutas)
-    ├── handlers/
-    │   ├── commands.js                # Handlers de comandos (show_url, close_screen, etc.)
-    │   └── provisioning.js            # Flujo de vinculación inicial
-    ├── services/
-    │   ├── assets.js                  # Sincronización de activos locales
-    │   ├── auth.js                    # Refresh de tokens JWT
-    │   ├── device.js                  # Registro de dispositivo y reboot
-    │   ├── gpu.js                     # Configuración de GPU y memoria
-    │   ├── network.js                 # Monitoreo de conectividad
-    │   ├── socket.js                  # Conexión WebSocket con handlers delegados
-    │   ├── state.js                   # Persistencia de URLs y auto-refresh
-    │   └── updater.js                 # Auto-actualización via electron-updater
-    ├── utils/
-    │   └── configManager.js           # Gestión de config.json
-    ├── icons/                         # Iconos de la aplicación
-    ├── main.js                        # Proceso principal (orquestador)
-    ├── fallback.html                  # Página de fallback offline
-    ├── identify.html                  # Ventana de identificación de pantalla
-    ├── identify-preload.js            # Preload para identify.html
-    ├── provision.html                 # Modo de vinculación inicial
-    ├── preload.js                     # Preload general
-    ├── package.json                   # Metadata y configuración Electron
-    └── README.md
-```
-
-### Arquitectura Modular
-
-| Capa | Descripción |
-|------|-------------|
-| **main.js** | Orquestador que inicializa servicios y coordina eventos |
-| **services/** | Módulos independientes con responsabilidad única |
-| **handlers/** | Ejecutores de comandos remotos y flujos de usuario |
-| **config/** | Constantes, rutas y configuración centralizada |
-| **utils/** | Utilidades reutilizables |
-
----
-
-## Troubleshooting
-
-### El agente no conecta al servidor
-
-- Verificar la URL del servidor en la configuración del agente (`SERVER_URL`, `.env`, etc.).
-- Comprobar que el backend está accesible desde la red del salón.
-- Revisar si un firewall/antivirus está bloqueando la conexión.
-
-### No aparecen pantallas / monitores
-
-- Comprobar que Windows detecta todas las pantallas (Configuración de pantalla).
-- Reiniciar el agente después de cambiar la configuración de monitores.
-- **Nota**: Los IDs (1, 2, 3) se asignan de izquierda a derecha según la configuración de Windows. Alinea las pantallas en Windows para coincidir con la realidad.
-
-### No se actualiza
-
-- Confirmar que:
-  - Existe una **Release** con el mismo `tag` que la versión del `package.json`.
-  - El `latest.yml` está presente en la Release o en la URL configurada.
-- Revisar logs del agente para ver errores de `electron-updater`.
-
-### Se queda en modo vinculación
-
-- Verificar que el `deviceId` se ha registrado correctamente en el panel web.
-- Revisar si el backend está enviando el evento de éxito de provisión.
-- Comprobar logs del backend para ver si se ha recibido el `deviceId`.
-
-### Token Inválido o "invalid signature"
-
-- Si ves muchos logs de `invalid signature` en el backend, es probable que la configuración local del agente esté corrupta o no encriptada correctamente.
-- **Solución**: Borra el archivo `config.json` en el agente y vuelve a vincularlo.
-
-
----
+##### Proprietary - All rights reserved

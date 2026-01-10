@@ -1,13 +1,11 @@
 /**
- * Servicio de Sincronización de Activos Locales
- * 
- * Descarga y mantiene actualizados los contenidos locales (videos/imagenes).
+ * Asset Sync Service
+ * Descarga y mantiene contenidos locales actualizados
  */
 
 const fs = require('fs');
 const path = require('path');
-// Usamos el fetch nativo global de Node/Electron
-const { Readable } = require('stream'); // Necesario para manejar streams de descarga con el nuevo fetch
+
 const { log } = require('../utils/logConfig');
 const { SYNC_API_URL, CONTENT_DIR, SERVER_URL } = require('../config/constants');
 
@@ -39,7 +37,7 @@ async function syncLocalAssets(agentToken) {
         const localFiles = fs.readdirSync(CONTENT_DIR);
         log.info(`[SYNC - DEBUG]: Encontrados ${localFiles.length} archivos locales en disco.`);
 
-        // Eliminar obsoletos
+
         const filesToDelete = localFiles.filter(file => !serverAssetMap.has(file));
         for (const fileToDelete of filesToDelete) {
             try {
@@ -50,7 +48,7 @@ async function syncLocalAssets(agentToken) {
             }
         }
 
-        // Descargar nuevos
+
         const filesToDownload = serverAssets.filter(asset => !localFiles.includes(asset.serverFilename));
         for (const assetToDownload of filesToDownload) {
             log.info(`[SYNC]: Descargando nuevo activo: ${assetToDownload.originalFilename}...`);

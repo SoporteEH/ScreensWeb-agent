@@ -1,19 +1,15 @@
 /**
- * Constantes y configuración del agente ScreensWeb
- * 
- * - Desarrollo: usa .env con dotenv
- * - Producción: SERVER_URL inyectado en package.json via extraMetadata
+ * Configuration Constants
+ * Maneja configuración de desarrollo y producción
  */
 
 const { app } = require('electron');
 const path = require('path');
 
-// Carga variables de entorno desde .env (desarrollo)
+
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
-// Obtener SERVER_URL:
-// 1. Primero intenta desde process.env (desarrollo con .env)
-// 2. Luego desde package.json.config (producción empaquetada)
+
 let SERVER_URL = process.env.SERVER_URL;
 
 if (!SERVER_URL) {
@@ -21,7 +17,7 @@ if (!SERVER_URL) {
         const packageJson = require('../package.json');
         SERVER_URL = packageJson.config?.serverUrl;
     } catch (e) {
-        // Ignorar error si no se puede leer package.json
+
     }
 }
 
@@ -29,26 +25,25 @@ if (!SERVER_URL) {
     console.error('='.repeat(60));
     console.error('ERROR: SERVER_URL no está configurado.');
     console.error('');
-    console.error('Para desarrollo:');
-    console.error('  1. Copia .env.example a .env');
-    console.error('  2. Configura SERVER_URL=http://tu-servidor:3000');
+    console.error('Para desarrollo: Copia .env.example a .env y configura SERVER_URL');
+    console.error('Para producción: Configura SERVER_URL en GitHub Secrets');
     console.error('');
     console.error('Para producción:');
     console.error('  Asegúrate que SERVER_URL esté en GitHub Secrets');
     console.error('='.repeat(60));
 }
 
-// RUTAS DE DIRECTORIOS Y ARCHIVOS
+
 const CONFIG_DIR = path.join(app.getPath('userData'), 'ScreensWeb');
 const CONFIG_FILE_PATH = path.join(CONFIG_DIR, 'config.json');
 const STATE_FILE_PATH = path.join(CONFIG_DIR, 'state.json');
 const CONTENT_DIR = path.join(CONFIG_DIR, 'content');
 
-// URLs de la API
+
 const AGENT_REFRESH_URL = SERVER_URL ? `${SERVER_URL}/api/auth/agent-refresh` : '';
 const SYNC_API_URL = SERVER_URL ? `${SERVER_URL}/api/users/me/local-assets` : '';
 
-// Constantes de tiempo (milisegundos)
+
 const CONSTANTS = {
     HEARTBEAT_INTERVAL_MS: 30 * 1000,           // Heartbeat cada 30 segundos
     TOKEN_CHECK_INTERVAL_MS: 4 * 60 * 60 * 1000, // Verifica token cada 4 horas
@@ -62,7 +57,7 @@ const CONSTANTS = {
     SOCKET_RECONNECT_DELAY_MAX_MS: 60 * 1000,    // Máximo delay entre reconexiones
 };
 
-// Versión del agente
+
 let AGENT_VERSION = 'Unknown';
 try {
     const packageJson = require('../package.json');
@@ -71,7 +66,7 @@ try {
     console.error('[CONFIG]: No se pudo leer la versión del package.json');
 }
 
-// EXPORTS
+
 module.exports = {
     SERVER_URL,
     CONFIG_DIR,

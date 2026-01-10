@@ -9,11 +9,11 @@
 const log = require('electron-log');
 const path = require('path');
 
-// Configuración general
+
 log.transports.file.level = 'info';
 log.transports.console.level = 'debug';
 
-// Hook para enviar errores al servidor central
+
 log.hooks.push((message, transport) => {
     if (transport !== log.transports.file) return message;
     if (message.level !== 'error' && message.level !== 'warn') return message;
@@ -45,30 +45,28 @@ log.hooks.push((message, transport) => {
         request.setHeader('Content-Type', 'application/json');
         request.setHeader('Authorization', `Bearer ${config.agentToken}`);
 
-        request.on('error', () => { /* Silenciar errores de envío para evitar bucles */ });
+        request.on('error', () => { });
 
         request.write(JSON.stringify(logData));
         request.end();
 
-    } catch (e) {
-        // Ignorar errores en el hook de logging
-    }
+    } catch (e) { }
 
     return message;
 });
 
-// Rotación automática
+
 log.transports.file.maxSize = 10 * 1024 * 1024;
 log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}';
 
-// Mantiene los últimos 7 archivos de log
+
 log.transports.file.archiveLog = (oldPath) => {
     const info = path.parse(oldPath);
     const timestamp = new Date().toISOString().replace(/:/g, '-').split('.')[0];
     return path.join(info.dir, `${info.name}.${timestamp}${info.ext}`);
 };
 
-// Limpia logs viejos
+
 function cleanOldLogs() {
     const fs = require('fs');
     const logDir = path.dirname(log.transports.file.getFile().path);
@@ -83,7 +81,7 @@ function cleanOldLogs() {
                 const filePath = path.join(logDir, file);
                 const stats = fs.statSync(filePath);
 
-                // Borrar si es más viejo que 7 días
+
                 if (now - stats.mtimeMs > maxAge) {
                     fs.unlinkSync(filePath);
                     log.info(`[CLEANUP]: Log antiguo eliminado: ${file}`);
@@ -95,18 +93,18 @@ function cleanOldLogs() {
     }
 }
 
-// Limpiar logs viejos al iniciar
+
 cleanOldLogs();
 
-// Limpiar logs viejos cada 24 horas
+
 setInterval(cleanOldLogs, 24 * 60 * 60 * 1000);
 
-// Logger heartbeats 
+
 const heartbeatLog = {
     _counter: 0,
     _lastLog: 0,
 
-    // log cada 10 heartbeats
+
     info: function (message) {
         this._counter++;
         const now = Date.now();
@@ -118,7 +116,7 @@ const heartbeatLog = {
     }
 };
 
-// Logger para updater 
+
 const updaterLog = {
     _lastUpdateCheck: 0,
 

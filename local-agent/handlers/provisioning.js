@@ -1,22 +1,18 @@
 /**
- * Handler de Modo Vinculación (Provisioning)
- * 
- * Gestiona el flujo de registro inicial del dispositivo ante el servidor.
+ * Provisioning Handler
+ * Gestiona registro inicial del dispositivo
  */
 
 const { BrowserWindow, app } = require('electron');
 const path = require('path');
-// Usamos el fetch nativo global de Node/Electron
+
 const { io } = require('socket.io-client');
 const { log } = require('../utils/logConfig');
 const { SERVER_URL } = require('../config/constants');
 const { saveConfig } = require('../utils/configManager');
 const { getMachineId } = require('../services/device');
 
-/**
- * Inicia el proceso de vinculación.
- * @param {object} context - Contexto global compartido
- */
+// Inicia proceso de vinculación
 function startProvisioningMode(context) {
     const deviceId = getMachineId();
     log.info(`[PROVISIONING]: ID de Maquina: ${deviceId}`);
@@ -36,10 +32,32 @@ function startProvisioningMode(context) {
         provisionWindow.webContents.send('device-id', deviceId);
     });
 
-    const socket = io(SERVER_URL);
+    // Configurar socket con reconexión automática
+    const socket = io(SERVER_URL, {
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 2000,
+        reconnectionDelayMax: 10000,
+        randomizationFactor: 0.5,
+        timeout: 10000
+    });
+
     socket.on('connect', () => {
         log.info('[PROVISIONING]: Conectado al servidor. Esperando vinculacion...');
         socket.emit('register-for-provisioning', deviceId);
+    });
+
+    socket.on('reconnect', (attemptNumber) => {
+        log.info(`[PROVISIONING]: Reconectado despues de ${attemptNumber} intentos. Re-registrando para vinculacion...`);
+        socket.emit('register-for-provisioning', deviceId);
+    });
+
+    socket.on('disconnect', (reason) => {
+        log.warn(`[PROVISIONING]: Desconectado del servidor. Razon: ${reason}`);
+    });
+
+    socket.on('connect_error', (error) => {
+        log.error(`[PROVISIONING]: Error de conexion: ${error.message}`);
     });
 
     socket.on('provision-success', async () => {

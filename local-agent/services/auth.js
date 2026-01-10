@@ -1,20 +1,15 @@
 /**
- * Servicio de Autenticación del Agente
- * 
- * Gestiona el refresco del token JWT y el bucle de verificación.
+ * Authentication Service
+ * Gestiona refresco de token JWT
  */
 
-// Usamos el fetch nativo global de Node/Electron
+
 const { jwtDecode } = require('jwt-decode');
 const { log } = require('../utils/logConfig');
 const { AGENT_REFRESH_URL } = require('../config/constants');
 const { loadConfig, saveConfig } = require('../utils/configManager');
 
-/**
- * Llama a la API del servidor para refrescar el JWT del agente.
- * @param {string} currentAgentToken - El token actual que se va a refrescar.
- * @returns {Promise<string>} El nuevo token o el token antiguo si el refresco falla.
- */
+// Refresca token JWT del agente
 async function refreshAgentToken(currentAgentToken) {
     log.info('[AGENT-AUTH]: Intentando refrescar el token...');
     try {
@@ -48,7 +43,7 @@ async function refreshAgentToken(currentAgentToken) {
 /**
  * Inicia un bucle periódico para verificar la validez del token y refrescarlo si es necesario.
  * @param {string} agentToken - El token actual
- * @param {Function} onTokenRefreshed - Callback cuando el token se refresca (opcional)
+ * @param {Function} onTokenRefreshed - Callback cuando el token se refresca
  * @returns {NodeJS.Timeout} El ID del intervalo
  */
 function startTokenRefreshLoop(agentToken, onTokenRefreshed) {
@@ -63,7 +58,7 @@ function startTokenRefreshLoop(agentToken, onTokenRefreshed) {
             const nowMs = Date.now();
             const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-            // Si quedan menos de 30 días para la expiración, inicia el refresco.
+
             if ((expTimeMs - nowMs) < THIRTY_DAYS_MS) {
                 log.info('[AGENT-AUTH]: El token esta a punto de expirar, iniciando refresco...');
                 const newToken = await refreshAgentToken(agentToken);

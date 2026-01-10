@@ -1,18 +1,13 @@
 /**
- * Servicio de Monitoreo de Red
- * 
- * Detecta cambios en la conectividad a internet y notifica al sistema.
+ * Network Monitoring Service
+ * Detecta cambios en conectividad a internet
  */
 
 const { net } = require('electron');
 const { log } = require('../utils/logConfig');
 const { CONSTANTS } = require('../config/constants');
 
-/**
- * Inicia el monitoreo de red.
- * @param {object} handlers - Objeto con funciones onOnline y onOffline
- * @returns {NodeJS.Timeout} ID del intervalo
- */
+// Inicia monitoreo de red
 function startNetworkMonitoring(handlers) {
     let networkWasOffline = false;
     log.info('[NETWORK]: Iniciando monitoreo de conectividad de red.');

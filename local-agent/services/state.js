@@ -1,8 +1,6 @@
 /**
- * Servicio de Estado y Pantallas
- * 
- * Gestiona el mapeo de hardware a IDs simples y la persistencia
- * del estado de las pantallas (URLs cargadas, timers, etc).
+ * State Service
+ * Gestiona mapeo de pantallas y persistencia de estado
  */
 
 const { screen } = require('electron');
@@ -10,10 +8,7 @@ const fs = require('fs');
 const { log } = require('../utils/logConfig');
 const { STATE_FILE_PATH } = require('../config/constants');
 
-/**
- * Construye el mapa de pantallas usando IDs simples ordenados por posición.
- * @param {Map} hardwareIdToDisplayMap - Mapa a actualizar
- */
+// Construye mapa de pantallas ordenado por posición
 async function buildDisplayMap(hardwareIdToDisplayMap) {
     hardwareIdToDisplayMap.clear();
     const displays = screen.getAllDisplays();
@@ -29,10 +24,7 @@ async function buildDisplayMap(hardwareIdToDisplayMap) {
     log.info('[DISPLAY_MAP]: Mapa de pantallas actualizado:', Array.from(hardwareIdToDisplayMap.keys()));
 }
 
-/**
- * Carga de forma segura el último estado conocido desde el archivo JSON.
- * @returns {object} El objeto de estado
- */
+// Carga último estado desde archivo JSON
 function loadLastState() {
     try {
         if (fs.existsSync(STATE_FILE_PATH)) {

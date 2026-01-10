@@ -1,8 +1,6 @@
 /**
- * Servicio de Dispositivo
- * 
- * Gestiona la identidad del dispositivo (Machine ID), el registro en el servidor
- * y comandos a nivel de sistema como el reinicio.
+ * Device Service
+ * Gestiona identidad del dispositivo y comandos de sistema
  */
 
 const { machineIdSync } = require('node-machine-id');
@@ -10,10 +8,7 @@ const { exec } = require('child_process');
 const { log } = require('../utils/logConfig');
 const { app } = require('electron');
 
-/**
- * Obtiene el ID único de la máquina.
- * @returns {string} ID de la máquina
- */
+// Obtiene ID único de la máquina
 function getMachineId() {
     try {
         return machineIdSync();
@@ -23,12 +18,7 @@ function getMachineId() {
     }
 }
 
-/**
- * Recopila información de pantallas y registra el dispositivo en el servidor via Socket.
- * @param {object} socket - Instancia de socket.io
- * @param {string} deviceId - ID del dispositivo
- * @param {Map} hardwareIdToDisplayMap - Mapa de pantallas
- */
+// Registra dispositivo en el servidor
 function registerDevice(socket, deviceId, hardwareIdToDisplayMap) {
     if (!socket || !socket.connected) return;
 
@@ -48,9 +38,7 @@ function registerDevice(socket, deviceId, hardwareIdToDisplayMap) {
     });
 }
 
-/**
- * Ejecuta comando de reinicio según el SO.
- */
+// Ejecuta comando de reinicio según SO
 function handleRebootDevice() {
     const platform = process.platform;
     let command = '';

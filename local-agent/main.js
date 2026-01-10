@@ -1,12 +1,6 @@
 /**
- * ScreensWeb Local Agent - Main Process
- * 
- * - Conexión WebSocket resiliente con reconexión automática
- * - Gestión multi-pantalla con IDs estables por posición
- * - Restauración automática de contenido (online/offline)
- * - Actualización via electron-updater
- * - Sincronización de activos locales
- * - Modo vinculación (provisioning) para nuevos dispositivos
+ * ScreensWeb Local Agent
+ * Gestiona conexión WebSocket, multi-pantalla y actualizaciones automáticas
  */
 
 const { app, BrowserWindow, screen, net } = require('electron');
@@ -15,7 +9,7 @@ const path = require('path');
 const fs = require('fs');
 const { exec } = require('child_process');
 
-// Configura logger y auto-updater inmediatamente
+
 log.info('ScreensWeb Agent starting... (Mode: Safe-Update)');
 
 try {
@@ -26,7 +20,7 @@ try {
     log.error('Fatal: Failed to initialize auto-updater:', updaterError);
 }
 
-// ENVUELVE EL RESTO DEL ARRANQUE EN TRY/CATCH
+
 try {
     const {
         SERVER_URL,
@@ -80,7 +74,7 @@ try {
     // bandeja (Tray) y Control
     const { createTray, openControlWindow } = require('./services/tray');
 
-    // IPC HANDLERS PARA ACCIONES DEL AGENTE
+
     const { ipcMain } = require('electron');
     ipcMain.on('agent-action', (event, { action, data }) => {
         log.info(`[IPC]: Recibida accion: ${action}`);
@@ -123,14 +117,14 @@ try {
         });
     }
 
-    // OPTIMIZACIÓN DE RENDIMIENTO (usando módulo services/gpu.js)
+
     configureGpu();
     configureMemory();
     registerGpuCrashHandlers();
 
-    // El arranque de Squirrel se ha eliminado para usar NSIS de forma nativa.
 
-    // INICIO AUTOMÁTICO WINDOWS
+
+
     if (app.isPackaged) {
         app.setLoginItemSettings({
             openAtLogin: true,
@@ -140,11 +134,11 @@ try {
         log.info('[STARTUP]: Configurado inicio automático con Windows.');
     }
 
-    // Log de configuración (las constantes vienen de config/constants.js)
+
     log.info(`[CONFIG]: Usando servidor: ${SERVER_URL}`);
     log.info(`[CONFIG]: Directorio de contenido local: ${CONTENT_DIR}`);
 
-    // VARIABLES GLOBALES
+
     let deviceId;
     let agentToken;
     let socket;
@@ -152,16 +146,16 @@ try {
     let tokenRefreshInterval;
     let isSyncing = false;
     let isOnline = false;
-    let networkWasOffline = false; // Detecta recuperación de red
-    let networkCheckInterval; // Intervalo de monitoreo de red
-    let screenChangeTimeout; // Para el debounce de pantallas
+    let networkWasOffline = false;
+    let networkCheckInterval;
+    let screenChangeTimeout;
     const managedWindows = new Map();
-    const identifyWindows = new Map(); // Ventanas de identificación por pantalla
+    const identifyWindows = new Map();
     const retryManager = new Map();
     const hardwareIdToDisplayMap = new Map();
     const autoRefreshTimers = new Map();
 
-    // Inicializar handlers de comandos con el contexto global
+
     commandHandlers.initializeHandlers({
         get socket() { return socket; },
         get deviceId() { return deviceId; },
@@ -176,7 +170,7 @@ try {
         handleShowUrl: (cmd, att) => handleShowUrl(cmd, att)
     });
 
-    // Limpieza periódica de caché (cada 30 min)
+
     setInterval(() => {
         managedWindows.forEach((win, screenId) => {
             if (!win.isDestroyed() && win.webContents && win.webContents.session) {
@@ -185,18 +179,16 @@ try {
         });
     }, 30 * 60 * 1000);
 
-    // MODO VINCULACION (PROVISIONING) - Primera configuración del dispositivo
 
-    /**
-     * Inicia el agente en modo vinculacion para dispositivos sin configurar.
-     */
+
+    // Inicia modo vinculación para dispositivos sin configurar
     function startProvisioningMode() {
         provisionWindow = startProvisioningHandler({
             get socket() { return socket; }
         });
     }
 
-    // MODO NORMAL - Operación principal del agente
+
 
     /**
      * Manejador debounced para cambios de pantalla (conexión/desconexión de monitores).
@@ -211,7 +203,7 @@ try {
         screenChangeTimeout = setTimeout(async () => {
             log.info('[DISPLAY]: Entorno estabilizado. Actualizando mapa de pantallas.');
 
-            // Guardar IDs de pantallas antes del cambio
+
             const previousScreenIds = Array.from(hardwareIdToDisplayMap.keys());
 
             await buildDisplayMap(hardwareIdToDisplayMap);
@@ -219,7 +211,7 @@ try {
             const currentScreenIds = Array.from(hardwareIdToDisplayMap.keys());
 
             if (reason === 'removed') {
-                // Cerrar SOLO las ventanas huerfanas (pantallas que ya no existen)
+
                 const orphanedIds = previousScreenIds.filter(id => !currentScreenIds.includes(id));
                 for (const orphanedId of orphanedIds) {
                     const win = managedWindows.get(orphanedId);
@@ -232,13 +224,13 @@ try {
             }
 
             if (reason === 'added') {
-                // Identificar SOLO las pantallas nuevas (que no existian antes)
+
                 const newScreenIds = currentScreenIds.filter(id => !previousScreenIds.includes(id));
 
                 if (newScreenIds.length > 0) {
                     log.info(`[DISPLAY]: Nuevas pantallas detectadas: ${newScreenIds.join(', ')}`);
 
-                    // Restaurar contenido SOLO para las pantallas nuevas
+
                     const lastState = loadLastState();
                     for (const newId of newScreenIds) {
                         if (lastState[newId]) {
@@ -263,10 +255,7 @@ try {
         }, CONSTANTS.SCREEN_DEBOUNCE_MS);
     }
 
-    /**
-     * Inicializa el agente en modo operativo normal.
-     * Carga configuración, construye mapa de pantallas, restaura contenido y conecta al servidor.
-     */
+    // Inicializa modo normal del agente
     async function startNormalMode() {
         const config = loadConfig();
         deviceId = config.deviceId;
@@ -278,19 +267,19 @@ try {
             agentToken = newToken;
         });
 
-        // Construye el mapa de pantallas por primera vez ANTES de conectar
+
         await buildDisplayMap(hardwareIdToDisplayMap);
 
-        // El agente funciona aunque el servidor no este disponible
+
         restoreAllContentImmediately();
 
-        // Conecta al servidor (en paralelo, no bloquea la restauracion)
+
         connectToSocketServer(agentToken);
 
-        // Inicia monitoreo de conectividad de red
+
         startNetworkMonitoring();
 
-        // Offset aleatorio para evitar picos en el servidor
+
         const updateDelay = CONSTANTS.UPDATE_CHECK_MIN_DELAY_MS + Math.random() * (CONSTANTS.UPDATE_CHECK_MAX_DELAY_MS - CONSTANTS.UPDATE_CHECK_MIN_DELAY_MS);
         setTimeout(checkForUpdates, updateDelay);
 
@@ -362,7 +351,7 @@ try {
                         log.info(`[STARTUP]: Ventana fallback creada en pantalla ${stableId}`);
                     }, 500 * restoredCount);
                 } else {
-                    // Con internet o contenido local: cargar normalmente
+
                     log.info(`[STARTUP]: Restaurando pantalla ${stableId}: ${screenData.url}${screenData.refreshInterval ? ` (auto-refresh: ${screenData.refreshInterval}min)` : ''}`);
 
                     setTimeout(() => {
@@ -383,11 +372,7 @@ try {
         log.info(`[STARTUP]: ${restoredCount} pantallas procesadas.`);
     }
 
-    /**
-     * Inicia el monitoreo periódico de conectividad de red.
-     * Detecta pérdida y recuperación de conexión a internet.
-     * Cuando se recupera la conexión, restaura automáticamente las URLs guardadas.
-     */
+    // Inicia monitoreo de red
     function startNetworkMonitoring() {
         if (networkCheckInterval) clearInterval(networkCheckInterval);
 
@@ -416,10 +401,7 @@ try {
         });
     }
 
-    /**
-     * Muestra la página de fallback en todas las ventanas que tienen contenido remoto.
-     * Se usa cuando se pierde la conexión a internet.
-     */
+    // Muestra fallback cuando se pierde internet
     function showFallbackOnRemoteWindows() {
         const fallbackPath = `file://${path.join(__dirname, 'fallback.html')}`;
         const lastState = loadLastState();
@@ -427,7 +409,7 @@ try {
         for (const [screenId, win] of managedWindows.entries()) {
             if (win && !win.isDestroyed()) {
                 const screenData = lastState[screenId];
-                // Solo mostrar fallback si es contenido remoto (no local:)
+
                 if (screenData && screenData.url && !screenData.url.startsWith('local:')) {
                     log.info(`[NETWORK]: Mostrando fallback en pantalla ${screenId} (sin internet)`);
                     win.loadURL(fallbackPath);
@@ -436,11 +418,7 @@ try {
         }
     }
 
-    /**
-     * Establece conexión WebSocket con el servidor central.
-     * Configura handlers para todos los eventos críticos.
-     * @param {string} token - JWT del agente para autenticación
-     */
+    // Conecta al servidor WebSocket
     function connectToSocketServer(token) {
         socket = connectSocketService(token, {
             onConnect: () => {
@@ -505,7 +483,7 @@ try {
         registerDeviceService(socket, deviceId, hardwareIdToDisplayMap);
     }
 
-    // Los Command Handlers ahora residen en handlers/commands.js
+
 
     const {
         sendCommandFeedback,
@@ -518,18 +496,12 @@ try {
 
 
 
-    /**
-     * Envía latido periódico al servidor con lista de pantallas activas.
-     * Se ejecuta cada 30 segundos para mantener el estado de conexión.
-     */
+    // Envía heartbeat al servidor
     function sendHeartbeat() {
         heartbeatService(socket, Array.from(hardwareIdToDisplayMap.keys()));
     }
 
-    /**
-     * Sincroniza activos locales con el servidor.
-     * Wrapper que gestiona el flag isSyncing y llama al servicio.
-     */
+    // Sincroniza activos locales
     async function syncLocalAssets() {
         if (isSyncing) {
             log.info('[SYNC]: Sincronizacion ya en progreso. Saltando.');
@@ -543,12 +515,10 @@ try {
         }
     }
 
-    /**
-     * Decide entre modo vinculación o modo normal según configuración existente.
-     */
+    // Decide modo de inicio según configuración
     const initialConfig = loadConfig();
     app.whenReady().then(() => {
-        // Inicializar Icono en Bandeja (Tray)
+
         createTray(SERVER_URL, AGENT_VERSION);
 
         if (!initialConfig.deviceId) {
@@ -569,7 +539,7 @@ try {
     });
 
 } catch (bootstrapError) {
-    // El proceso sigue vivo para que electron-updater pueda descargar una versión corregida en segundo plano.
+
     log.error('FATAL BOOTSTRAP ERROR: El agente no pudo iniciar correctamente.');
     log.error(bootstrapError);
     log.error('El agente permanecerá en espera de una auto-actualización correctiva...');

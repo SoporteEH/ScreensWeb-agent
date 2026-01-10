@@ -1,19 +1,13 @@
 /**
- * Servicio de Socket.io
- * 
- * Gestiona la conexión con el servidor central, eventos de comando y latidos.
+ * Socket Service
+ * Gestiona conexión WebSocket y eventos
  */
 
 const { io } = require('socket.io-client');
 const { log, heartbeatLog } = require('../utils/logConfig');
 const { SERVER_URL, CONSTANTS } = require('../config/constants');
 
-/**
- * Establece conexión WebSocket con el servidor central.
- * @param {string} token - JWT del agente
- * @param {object} handlers - Objeto con funciones manejadoras de eventos
- * @returns {Socket} Instancia del socket
- */
+// Establece conexión WebSocket con servidor
 function connectToSocketServer(token, handlers) {
     const socket = io(SERVER_URL, {
         reconnection: true,
@@ -57,7 +51,7 @@ function connectToSocketServer(token, handlers) {
         log.error(`[SOCKET]: Error de conexion: ${error.message}`);
     });
 
-    // Delegar eventos de negocio
+
     socket.on('command', (command) => {
         if (handlers.onCommand) handlers.onCommand(command);
     });
@@ -73,15 +67,11 @@ function connectToSocketServer(token, handlers) {
     return socket;
 }
 
-/**
- * Envía latido periódico al servidor.
- * @param {Socket} socket
- * @param {string[]} screenIds
- */
+// Envía heartbeat al servidor
 function sendHeartbeat(socket, screenIds) {
     if (!socket || !socket.connected) return;
     socket.emit('heartbeat', { screenIds });
-    heartbeatLog.info(screenIds); // Reduce verbosidad: solo loggea cada 10 heartbeats
+    heartbeatLog.info(screenIds);
 }
 
 module.exports = {

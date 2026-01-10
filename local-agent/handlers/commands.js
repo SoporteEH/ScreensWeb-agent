@@ -1,7 +1,6 @@
 /**
- * Handlers de Comandos del Agente
- * 
- * Gestiona la ejecución de comandos remotos (show_url, close_screen, etc).
+ * Command Handlers
+ * Gestiona ejecución de comandos remotos
  */
 
 const { BrowserWindow, app } = require('electron');
@@ -12,17 +11,12 @@ const { CONTENT_DIR } = require('../config/constants');
 
 let context = {};
 
-/**
- * Inicializa los handlers con el contexto del proceso principal.
- * @param {object} ctx - Referencias a variables y estados globales de main.js
- */
+// Inicializa handlers con contexto global
 function initializeHandlers(ctx) {
     context = ctx;
 }
 
-/**
- * Envía feedback al servidor sobre el resultado de un comando.
- */
+// Envía feedback del comando al servidor
 function sendCommandFeedback(command, status, message) {
     if (!command || !command.commandId) return;
     if (command.silent) return;
@@ -39,9 +33,7 @@ function sendCommandFeedback(command, status, message) {
     }
 }
 
-/**
- * Programa reintento con backoff exponencial.
- */
+// Programa reintento con backoff exponencial
 function scheduleRetry(command) {
     const { screenIndex } = command;
     let attempt = (context.retryManager.get(screenIndex)?.attempt || 0) + 1;
@@ -157,7 +149,10 @@ function handleShowUrl(command, currentAttempt = 0) {
         context.saveCurrentState(screenIndex, url, credentials, refreshInterval || 0, context.autoRefreshTimers, context.managedWindows);
     }
 
-    if (!context.isOnline() && !url.startsWith('local:')) {
+    const { net } = require('electron');
+    const hasInternet = net.isOnline();
+
+    if (!hasInternet && !url.startsWith('local:')) {
         const errorMsg = `Error: Sin conexion. No se puede cargar la URL '${url}'. Se reintentara cuando vuelva la conexion.`;
         log.error(`[RESILIENCE]: ${errorMsg}`);
         sendCommandFeedback(command, 'error', errorMsg);

@@ -1,20 +1,18 @@
 /**
- * Gestión de configuración del agente con electron-store
+ * Config Manager
+ * Gestiona configuración del agente con electron-store
  */
 const Store = require('electron-store');
 const { log } = require('./logConfig');
 
-// Configuración de electron-store
+
 const store = new Store({
     name: 'config',
     encryptionKey: 'screensweb-agent-secure-key',
     clearInvalidConfig: true
 });
 
-/**
- * Carga la configuración del agente.
- * @returns {object} El objeto de configuración.
- */
+// Carga configuración del agente
 function loadConfig() {
     try {
         return store.store;
@@ -24,10 +22,7 @@ function loadConfig() {
     }
 }
 
-/**
- * Guarda el objeto de configuración.
- * @param {object} config - El objeto a guardar.
- */
+// Guarda configuración
 function saveConfig(config) {
     try {
         store.set(config);
@@ -36,9 +31,7 @@ function saveConfig(config) {
     }
 }
 
-/**
- * Elimina la configuración.
- */
+// Elimina configuración
 function deleteConfig() {
     try {
         store.clear();

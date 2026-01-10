@@ -9,14 +9,12 @@ const { log } = require('../utils/logConfig');
 let tray = null;
 let controlWindow = null;
 
-/**
- * Inicializa el icono de la bandeja del sistema
- */
+// Inicializa icono de bandeja
 function createTray(serverUrl, version) {
     if (tray) return tray;
 
     try {
-        // Usar el icono de la carpeta icons
+
         const iconPath = path.join(__dirname, '..', 'icons', 'icon.png');
         tray = new Tray(iconPath);
 
@@ -58,7 +56,7 @@ function createTray(serverUrl, version) {
         tray.setToolTip('ScreensWeb Agent');
         tray.setContextMenu(contextMenu);
 
-        // Doble click abre el panel de control
+
         tray.on('double-click', () => {
             openControlWindow(serverUrl, version);
         });
@@ -70,9 +68,7 @@ function createTray(serverUrl, version) {
     }
 }
 
-/**
- * Abre la pequeña ventana de control
- */
+// Abre ventana de control
 function openControlWindow(serverUrl, version) {
     if (controlWindow) {
         controlWindow.focus();
@@ -97,7 +93,7 @@ function openControlWindow(serverUrl, version) {
 
     controlWindow.loadFile(path.join(__dirname, '..', 'control.html'));
 
-    // Inyectar datos cuando el DOM esté listo
+
     controlWindow.webContents.on('did-finish-load', () => {
         controlWindow.webContents.send('agent-info', {
             serverUrl: serverUrl || 'Desconocido',
@@ -110,12 +106,12 @@ function openControlWindow(serverUrl, version) {
         controlWindow = null;
     });
 
-    // Quitar barra de menú
+
     controlWindow.setMenuBarVisibility(false);
 
-    // Handler para controles de ventana personalizados
+
     const { ipcMain } = require('electron');
-    ipcMain.removeAllListeners('window-control'); // Evitar duplicados
+    ipcMain.removeAllListeners('window-control');
     ipcMain.on('window-control', (event, action) => {
         if (controlWindow && !controlWindow.isDestroyed()) {
             if (action === 'minimize') {
