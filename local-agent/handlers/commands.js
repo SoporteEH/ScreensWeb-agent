@@ -76,6 +76,8 @@ function createContentWindow(display, urlToLoad, command) {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
+            // WARNING: Desactivado para permitir iframes y contenido mixto en señalización.
+            // Solo URLs seguras deberian llegar aquí (validadas en backend).
             webSecurity: false,
             allowRunningInsecureContent: true,
             backgroundThrottling: false,

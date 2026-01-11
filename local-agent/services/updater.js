@@ -1,5 +1,5 @@
 /**
- * Auto-Updater - Actualización automática del agente
+ * Auto-Updater
  * 
  * Gestiona la búsqueda, descarga e instalación de actualizaciones.
  */
@@ -7,28 +7,24 @@
 const { autoUpdater } = require('electron-updater');
 const { log } = require('../utils/logConfig');
 
-// Variable interna para controlar si hay una actualización en curso
+// controla si hay una actualización en curso
 let isCheckingForUpdate = false;
 
-/**
- * Configura el autoUpdater con la configuración inicial
- */
 function configureUpdater() {
-    // Configuración del autoUpdater
     autoUpdater.logger = log;
     autoUpdater.logger.transports.file.level = 'info';
-
-    // Configuración básica de actualización
     autoUpdater.autoDownload = true;
     autoUpdater.autoInstallOnAppQuit = true;
 
-    // - Permite downgrade para forzar actualizaciones completas
-    // - Desactiva actualizaciones pre-release a menos que sea necesario
+    // Permite downgrade para forzar actualizaciones completas
     autoUpdater.allowDowngrade = true;
     autoUpdater.allowPrerelease = false;
 
-    // forzar descargas completas y evitar problemas de checksum
-    autoUpdater.forceDevUpdateConfig = true;
+    // Forzar descargas completas y evita checksum (solo en dev)
+    const { app } = require('electron');
+    if (!app.isPackaged) {
+        autoUpdater.forceDevUpdateConfig = true;
+    }
     autoUpdater.fullChangelog = true;
 }
 
