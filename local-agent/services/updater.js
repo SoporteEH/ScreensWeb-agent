@@ -1,7 +1,5 @@
 /**
- * Auto-Updater
- * 
- * Gestiona la búsqueda, descarga e instalación de actualizaciones.
+ * Gestiona búsqueda, descarga e instalacion de actualizaciones.
  */
 
 const { autoUpdater } = require('electron-updater');
@@ -34,7 +32,7 @@ function configureUpdater() {
 function checkForUpdates() {
     log.info('[UPDATER]: Buscando actualizaciones...');
 
-    // Limpiar listeners anteriores para evitar duplicados
+    // Limpiar listeners anteriores evita duplicados
     autoUpdater.removeAllListeners('update-available');
     autoUpdater.removeAllListeners('update-not-available');
     autoUpdater.removeAllListeners('error');
@@ -150,7 +148,7 @@ function isUpdating() {
 }
 
 /**
- * Marca que se está buscando una actualización
+ * Marca buscando una actualización
  */
 function setUpdating(value) {
     isCheckingForUpdate = value;

@@ -23,7 +23,10 @@ function startProvisioningMode(context) {
         center: true,
         icon: path.join(__dirname, '../icons/icon.ico'),
         webPreferences: { preload: path.join(__dirname, '../preload.js') },
-        title: "Asistente de Vinculacion"
+        title: "Vinculación de CUOTAS",
+        backgroundColor: '#0a0a0a',
+        titleBarStyle: 'default',
+        frame: true
     });
     provisionWindow.setMenu(null);
 
