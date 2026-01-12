@@ -670,14 +670,20 @@
             // Enviar comando
             window.electron.sendAction('check-update');
 
-            // Re-habilitar después de 10 segundos (seguridad)
-            setTimeout(() => {
-                updateBtnText.style.display = 'flex';
-                updateBtnText.style.alignItems = 'center';
-                updateBtnText.style.gap = '8px';
-                updateSpinner.style.display = 'none';
-                updateBtn.disabled = false;
-            }, 10000);
+            // 10 segundos
+            let countdown = 10;
+            const countdownInterval = setInterval(() => {
+                countdown--;
+                if (countdown > 0) {
+                    updateSpinner.style.display = 'none';
+                    updateBtnText.style.display = 'flex';
+                    updateBtnText.innerHTML = `<span class="material-icons">timer</span><span>Espera ${countdown}s</span>`;
+                } else {
+                    clearInterval(countdownInterval);
+                    updateBtnText.innerHTML = '<span class="material-icons">system_update_alt</span><span>Buscar Actualización</span>';
+                    updateBtn.disabled = false;
+                }
+            }, 1000);
         });
 
         // Escuchar eventos de actualización
