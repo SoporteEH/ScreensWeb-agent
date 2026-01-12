@@ -77,7 +77,7 @@
       "createStartMenuShortcut": true,
       "runAfterFinish": true,
       "artifactName": "ScreensWebAgent-installer.${ext}",
-      "appPackageUrl": "latest",
+      "appPackageUrl": "https://github.com/SoporteEH/ScreensWeb-agent/releases/latest/download/",
       "menuCategory": false
     },
     "publish": {
