@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control Panel</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #1a1a1a;
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        /* Custom Title Bar */
+        .title-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 32px;
+            background: #1a1a1a;
+            border-bottom: 1px solid #2c2c2c;
+            -webkit-app-region: drag;
+            user-select: none;
+            padding: 0 12px;
+        }
+
+        .title-bar-text {
+            font-size: 12px;
+            color: #888888;
+            font-weight: 500;
+        }
+
+        .title-bar-controls {
+            display: flex;
+            gap: 8px;
+            -webkit-app-region: no-drag;
+        }
+
+        .title-bar-button {
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.15s;
+            background: transparent;
+        }
+
+        .title-bar-button:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .title-bar-button.close:hover {
+            background: #ef4444;
+        }
+
+        .title-bar-button .material-icons {
+            font-size: 16px;
+            color: #888888;
+        }
+
+        .title-bar-button.close:hover .material-icons {
+            color: white;
+        }
+
+        .container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .content-wrapper {
+            width: 100%;
+            max-width: 400px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Header */
+        .header {
+            width: 100%;
+            margin-bottom: 32px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #ff6600, #ff8533);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(255, 102, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo .material-icons {
+            color: white;
+            font-size: 28px;
+        }
+
+        .title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: -0.5px;
+        }
+
+        .version-badge {
+            font-size: 13px;
+            color: #aaaaaa;
+            font-weight: 600;
+            margin-top: -4px;
+        }
+
+        /* Card */
+        .card {
+            width: 100%;
+            background: #2c2c2c;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
+            padding: 24px;
+            border: 1px solid #3d3d3d;
+        }
+
+        /* Status Section */
+        .status-section {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-bottom: 24px;
+            margin-bottom: 24px;
+            border-bottom: 1px solid rgba(61, 61, 61, 0.5);
+        }
+
+        .status-label {
+            font-size: 14px;
+            font-weight: 500;
+            color: #888888;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(34, 197, 94, 0.1);
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .status-badge.offline {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.2);
+        }
+
+        .status-dot {
+            position: relative;
+            width: 10px;
+            height: 10px;
+        }
+
+        .status-dot::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: #1d9248;
+            border-radius: 50%;
+            animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+            opacity: 0.75;
+        }
+
+        .status-dot::after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: #1d9248;
+            border-radius: 50%;
+        }
+
+        .status-badge.offline .status-dot::before,
+        .status-badge.offline .status-dot::after {
+            background: #ef4444;
+        }
+
+        @keyframes ping {
+
+            75%,
+            100% {
+                transform: scale(2);
+                opacity: 0;
+            }
+        }
+
+        .status-text {
+            font-size: 12px;
+            font-weight: 600;
+            color: #1da850;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-badge.offline .status-text {
+            color: #ef4444;
+        }
+
+        /* Buttons */
+        .actions {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .btn {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+
+        .btn .material-icons {
+            font-size: 18px;
+            transition: transform 0.5s ease;
+        }
+
+        .btn-primary {
+            background: #ff6600;
+            color: white;
+            box-shadow: 0 4px 6px rgba(255, 102, 0, 0.2);
+        }
+
+        .btn-primary:hover {
+            background: #e65c00;
+            box-shadow: 0 6px 12px rgba(255, 102, 0, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .btn-primary:hover .material-icons {
+            transform: rotate(180deg);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .btn-secondary {
+            background: #3d3d3d;
+            color: #ffffff;
+        }
+
+        .btn-secondary:hover {
+            background: #4a4a4a;
+        }
+
+        .btn-secondary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary .material-icons {
+            color: #888888;
+        }
+
+        .btn-danger {
+            background: transparent;
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        /* Spinner */
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 32px;
+            text-align: center;
+        }
+
+        .footer-text {
+            font-size: 12px;
+            color: #888888;
+            opacity: 0.8;
+            font-weight: 500;
+        }
+
+        /* Notification Toast */
+        .notification {
+            position: fixed;
+            bottom: 95px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: #1a1a1a;
+            color: #ffffff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            font-size: 11px;
+            font-weight: 500;
+            opacity: 0;
+            transition: all 300ms ease-in-out;
+            z-index: 1000;
+            border: 1px solid #444444;
+            max-width: 85%;
+            white-space: nowrap;
+        }
+
+        .notification.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .notification.success {
+            border-color: #22c55e;
+            background: rgba(34, 197, 94, 0.15);
+            color: #22c55e;
+        }
+
+        .notification.error {
+            border-color: #ef4444;
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+        }
+
+        .notification.info {
+            border-color: #ff6600;
+            background: rgba(255, 102, 0, 0.15);
+            color: #ff6600;
+        }
+
+        /* Custom Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal {
+            background: #2c2c2c;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 340px;
+            width: 90%;
+            border: 1px solid #3d3d3d;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            animation: modalSlideIn 0.2s ease-out;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 12px;
+        }
+
+        .modal-message {
+            font-size: 14px;
+            color: #888888;
+            line-height: 1.5;
+            margin-bottom: 24px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .modal-btn {
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            font-family: inherit;
+        }
+
+        .modal-btn-cancel {
+            background: transparent;
+            color: #888888;
+            border: 1px solid #3d3d3d;
+        }
+
+        .modal-btn-cancel:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: #ffffff;
+        }
+
+        .modal-btn-confirm {
+            background: #ff6600;
+            color: white;
+        }
+
+        .modal-btn-confirm:hover {
+            background: #e65c00;
+        }
+
+        .modal-btn-confirm.danger {
+            background: #ef4444;
+        }
+
+        .modal-btn-confirm.danger:hover {
+            background: #dc2626;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Custom Title Bar -->
+    <div class="title-bar">
+        <span class="title-bar-text">Control Panel</span>
+        <div class="title-bar-controls">
+            <div class="title-bar-button" id="btn-minimize">
+                <span class="material-icons">minimize</span>
+            </div>
+            <div class="title-bar-button close" id="btn-window-close">
+                <span class="material-icons">close</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="container">
+        <div class="content-wrapper">
+            <!-- Header -->
+            <div class="header">
+                <div class="logo">
+                    <span class="material-icons">grid_view</span>
+                </div>
+                <span class="version-badge" id="agent-version"></span>
+            </div>
+
+            <!-- Card -->
+            <div class="card">
+                <!-- Status -->
+                <div class="status-section">
+                    <span class="status-label">Estado</span>
+                    <div class="status-badge" id="status-container">
+                        <div class="status-dot"></div>
+                        <span class="status-text" id="agent-status">Online</span>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="actions">
+                    <button class="btn btn-primary" id="btn-restart">
+                        <span class="material-icons">restart_alt</span>
+                        <span>Reiniciar</span>
+                    </button>
+
+                    <button class="btn btn-secondary" id="btn-update">
+                        <span id="update-btn-text">
+                            <span class="material-icons">system_update_alt</span>
+                            <span>Buscar Actualización</span>
+                        </span>
+                        <span id="update-spinner" class="spinner" style="display: none;"></span>
+                    </button>
+
+                    <button class="btn btn-danger" id="btn-quit">
+                        <span class="material-icons">power_settings_new</span>
+                        <span>Cerrar App</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="footer">
+                <div class="footer-text">ScreensWeb Agent © <span id="current-year"></span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="notification" class="notification"></div>
+
+    <!-- Custom Modal -->
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-title" id="modal-title"></div>
+            <div class="modal-message" id="modal-message"></div>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-btn-cancel" id="modal-cancel">Cancelar</button>
+                <button class="modal-btn modal-btn-confirm" id="modal-confirm">Aceptar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('current-year').textContent = new Date().getFullYear();
+
+        // Sistema de modal personalizado
+        let modalCallback = null;
+        const modalOverlay = document.getElementById('modal-overlay');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const modalConfirmBtn = document.getElementById('modal-confirm');
+        const modalCancelBtn = document.getElementById('modal-cancel');
+
+        function showModal(title, message, confirmText = 'Aceptar', isDanger = false) {
+            return new Promise((resolve) => {
+                modalTitle.textContent = title;
+                modalMessage.textContent = message;
+                modalConfirmBtn.textContent = confirmText;
+
+                // Aplicar estilo danger si es necesario
+                if (isDanger) {
+                    modalConfirmBtn.classList.add('danger');
+                } else {
+                    modalConfirmBtn.classList.remove('danger');
+                }
+
+                modalOverlay.classList.add('show');
+                modalCallback = resolve;
+            });
+        }
+
+        function hideModal() {
+            modalOverlay.classList.remove('show');
+        }
+
+        modalConfirmBtn.addEventListener('click', () => {
+            hideModal();
+            if (modalCallback) modalCallback(true);
+        });
+
+        modalCancelBtn.addEventListener('click', () => {
+            hideModal();
+            if (modalCallback) modalCallback(false);
+        });
+
+        // Cerrar modal al hacer click fuera
+        modalOverlay.addEventListener('click', (e) => {
+            if (e.target === modalOverlay) {
+                hideModal();
+                if (modalCallback) modalCallback(false);
+            }
+        });
+
+        // Interfaz Electron
+        window.electron.onAgentInfo((info) => {
+            document.getElementById('agent-version').textContent = 'v' + info.version;
+
+            const statusBadge = document.getElementById('status-container');
+            const statusText = document.getElementById('agent-status');
+
+            if (info.status === 'Online') {
+                statusBadge.classList.remove('offline');
+                statusText.textContent = 'Online';
+            } else {
+                statusBadge.classList.add('offline');
+                statusText.textContent = info.status;
+            }
+        });
+
+        // Botón reiniciar
+        document.getElementById('btn-restart').addEventListener('click', async () => {
+            const confirmed = await showModal(
+                'Reiniciar',
+                'La aplicación se cerrará y volverá a iniciarse automáticamente.',
+                'Reiniciar'
+            );
+            if (confirmed) {
+                window.electron.sendAction('restart');
+            }
+        });
+
+        // Botón cerrar
+        document.getElementById('btn-quit').addEventListener('click', async () => {
+            const confirmed = await showModal(
+                'Cerrar',
+                'La aplicación se cerrará completamente.',
+                'Cerrar',
+                true
+            );
+            if (confirmed) {
+                window.electron.sendAction('quit');
+            }
+        });
+
+        // Botón actualizar
+        const updateBtn = document.getElementById('btn-update');
+        const updateBtnText = document.getElementById('update-btn-text');
+        const updateSpinner = document.getElementById('update-spinner');
+
+        updateBtn.addEventListener('click', () => {
+            // Mostrar spinner y deshabilitar botón
+            updateBtnText.style.display = 'none';
+            updateSpinner.style.display = 'inline-block';
+            updateBtn.disabled = true;
+
+            // Enviar comando
+            window.electron.sendAction('check-update');
+
+            // Re-habilitar después de 10 segundos (seguridad)
+            setTimeout(() => {
+                updateBtnText.style.display = 'flex';
+                updateBtnText.style.alignItems = 'center';
+                updateBtnText.style.gap = '8px';
+                updateSpinner.style.display = 'none';
+                updateBtn.disabled = false;
+            }, 10000);
+        });
+
+        // Escuchar eventos de actualización
+        window.electron.onUpdateStatus((status) => {
+            const notification = document.getElementById('notification');
+
+            // Configurar notificación según el estado
+            if (status.type === 'up-to-date') {
+                notification.textContent = 'App en la última versión';
+                notification.className = 'notification success show';
+            } else if (status.type === 'downloading') {
+                notification.textContent = `Descargando actualización...`;
+                notification.className = 'notification info show';
+            } else if (status.type === 'downloaded') {
+                notification.textContent = 'Actualización descargada. Reiniciando...';
+                notification.className = 'notification success show';
+            } else if (status.type === 'error') {
+                notification.textContent = 'Error al buscar actualización';
+                notification.className = 'notification error show';
+            }
+
+            // Re-habilitar botón inmediatamente cuando hay respuesta
+            updateBtnText.style.display = 'flex';
+            updateBtnText.style.alignItems = 'center';
+            updateBtnText.style.gap = '8px';
+            updateSpinner.style.display = 'none';
+            updateBtn.disabled = false;
+
+            // Ocultar notificación después de 6 segundos
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 6000);
+        });
+
+        // Event listeners para controles de ventana personalizados
+        document.getElementById('btn-minimize').addEventListener('click', () => {
+            window.electron.minimizeWindow();
+        });
+
+        document.getElementById('btn-window-close').addEventListener('click', () => {
+            window.electron.closeWindow();
+        });
+    </script>
+</body>
+
+</html>

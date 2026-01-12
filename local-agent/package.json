@@ -1,45 +1,92 @@
 {
   "name": "local-agent",
-  "version": "1.0.13",
+  "version": "1.1.2",
   "description": "ScreensWeb Local Agent",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "electron-builder"
+    "build": "electron-builder",
+    "build:prod": "node scripts/inject-config.js && electron-builder"
   },
   "keywords": [],
-  "author": "",
+  "author": "SoporteEH",
   "license": "ISC",
   "dependencies": {
+    "dotenv": "^17.2.3",
     "electron-log": "^5.1.5",
-    "electron-squirrel-startup": "^1.0.1",
+    "electron-store": "^8.1.0",
     "electron-updater": "^6.1.1",
     "jwt-decode": "^4.0.0",
-    "node-fetch": "^2.6.7",
     "node-machine-id": "^1.1.12",
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
     "electron": "^38.2.1",
-    "electron-builder": "^24.6.4"
+    "electron-builder": "^24.13.3"
   },
   "build": {
     "appId": "com.screens.web.agent",
     "productName": "ScreensWeb Agent",
-    "icon": "icons/icon.ico",
+    "copyright": "Copyright © 2025 SoporteEH",
+    "asar": true,
+    "compression": "maximum",
+    "files": [
+      "main.js",
+      "config/**/*",
+      "services/**/*",
+      "handlers/**/*",
+      "utils/**/*",
+      "icons/**/*",
+      "*.html",
+      "preload.js",
+      "identify-preload.js",
+      "package.json",
+      "!mainOld.js"
+    ],
     "win": {
-      "target": "nsis",
-      "icon": "icons/icon.ico"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "nsis-web",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icons/icon.ico",
+      "artifactName": "ScreensWebAgent-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "differentialPackage": true,
+      "deleteAppDataOnUninstall": true
+    },
+    "nsisWeb": {
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "artifactName": "ScreensWebAgent-installer.${ext}",
+      "appPackageUrl": "https://github.com/SoporteEH/ScreensWeb-agent/releases/download/v${version}/",
+      "menuCategory": false
     },
     "publish": {
       "provider": "github",
       "owner": "SoporteEH",
       "repo": "ScreensWeb-agent"
-    },
-    "asarUnpack": [
-      "**/node_modules/electron-updater/**/*",
-      "**/node_modules/electron-log/**/*"
-    ]
+    }
+  },
+  "config": {
+    "serverUrl": "http://192.168.1.134:3000"
   }
 }
