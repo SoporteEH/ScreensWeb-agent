@@ -3,7 +3,7 @@
  * Gestiona registro inicial del dispositivo
  */
 
-const { BrowserWindow, app } = require('electron');
+const { BrowserWindow, app, ipcMain } = require('electron');
 const path = require('path');
 
 const { io } = require('socket.io-client');
@@ -25,10 +25,21 @@ function startProvisioningMode(context) {
         webPreferences: { preload: path.join(__dirname, '../preload.js') },
         title: "Vinculación de CUOTAS",
         backgroundColor: '#0a0a0a',
-        titleBarStyle: 'default',
-        frame: true
+        frame: false,
+        resizable: false
     });
     provisionWindow.setMenu(null);
+
+    // Manejadores para controles de ventana personalizados
+    ipcMain.on('window-control', (event, action) => {
+        if (!provisionWindow || provisionWindow.isDestroyed()) return;
+
+        if (action === 'minimize') {
+            provisionWindow.minimize();
+        } else if (action === 'close') {
+            provisionWindow.close();
+        }
+    });
 
     provisionWindow.loadFile(path.join(__dirname, '../provision.html'));
     provisionWindow.webContents.on('did-finish-load', () => {
