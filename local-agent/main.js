@@ -102,6 +102,13 @@ try {
         }
     });
 
+    // Handler versión de la app
+    const { ipcMain } = require('electron');
+    ipcMain.handle('get-app-version', () => {
+        return AGENT_VERSION;
+    });
+
+
 
     log.info('App starting...');
 

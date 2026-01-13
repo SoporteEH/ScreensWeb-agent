@@ -529,8 +529,8 @@
 
                     <button class="btn btn-secondary" id="btn-update">
                         <span id="update-btn-text">
-                            <span class="material-icons">system_update_alt</span>
-                            <span>Buscar Actualización</span>
+                            <span class="material-icons">sync</span>
+                            <span>Verificando...</span>
                         </span>
                         <span id="update-spinner" class="spinner" style="display: none;"></span>
                     </button>
@@ -616,8 +616,19 @@
         });
 
         // Interfaz Electron
+        let agentServerUrl = null;
+        console.log('[INIT] Control panel script loaded');
+
         window.electron.onAgentInfo((info) => {
             document.getElementById('agent-version').textContent = 'v' + info.version;
+
+            // Guardar server URL para version check
+            if (info.serverUrl && !agentServerUrl) {
+                agentServerUrl = info.serverUrl;
+                console.log('[AGENT INFO] Server URL set to:', agentServerUrl);
+                // Intentar check de versión ahora que tenemos la URL
+                setTimeout(() => checkVersionStatus(), 500);
+            }
 
             const statusBadge = document.getElementById('status-container');
             const statusText = document.getElementById('agent-status');
@@ -656,12 +667,59 @@
             }
         });
 
-        // Botón actualizar
+        // actualizar
         const updateBtn = document.getElementById('btn-update');
         const updateBtnText = document.getElementById('update-btn-text');
         const updateSpinner = document.getElementById('update-spinner');
+        let updateAvailable = false;
+
+        // Verifica versión en el servidor
+        async function checkVersionStatus() {
+            if (!agentServerUrl) {
+                console.log('[VERSION CHECK] Waiting for server URL...');
+                return;
+            }
+
+            try {
+                const currentVersion = await window.electron.getAppVersion();
+                const url = `${agentServerUrl}/api/agent/check-version?current=${currentVersion}`;
+                console.log('[VERSION CHECK] Fetching:', url);
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                console.log('[VERSION CHECK] Response:', data);
+                updateAvailable = data.updateAvailable;
+
+                if (updateAvailable) {
+                    updateBtnText.innerHTML = '<span class="material-icons">system_update_alt</span><span>Actualizar App</span>';
+                    updateBtn.classList.remove('btn-secondary');
+                    updateBtn.classList.add('btn-success');
+                    updateBtn.disabled = false;
+                } else {
+                    updateBtnText.innerHTML = '<span class="material-icons">check_circle</span><span>App Actualizada</span>';
+                    updateBtn.classList.remove('btn-success');
+                    updateBtn.classList.add('btn-secondary');
+                    updateBtn.disabled = true;
+                }
+            } catch (error) {
+                console.error('[VERSION CHECK] Error:', error);
+                updateBtnText.innerHTML = '<span class="material-icons">system_update_alt</span><span>Buscar Actualización</span>';
+                updateBtn.disabled = false;
+            }
+        }
+
+        // Verificar periódicamente cada 2 minutos
+        setInterval(() => {
+            if (agentServerUrl) {
+                checkVersionStatus();
+            }
+        }, 2 * 60 * 1000);
+
 
         updateBtn.addEventListener('click', () => {
+            if (!updateAvailable) return;
+
             // Mostrar spinner y deshabilitar botón
             updateBtnText.style.display = 'none';
             updateSpinner.style.display = 'inline-block';
@@ -670,7 +728,7 @@
             // Enviar comando
             window.electron.sendAction('check-update');
 
-            // 10 segundos
+            // 10 segundos countdown
             let countdown = 10;
             const countdownInterval = setInterval(() => {
                 countdown--;
@@ -680,8 +738,9 @@
                     updateBtnText.innerHTML = `<span class="material-icons">timer</span><span>Espera ${countdown}s</span>`;
                 } else {
                     clearInterval(countdownInterval);
-                    updateBtnText.innerHTML = '<span class="material-icons">system_update_alt</span><span>Buscar Actualización</span>';
-                    updateBtn.disabled = false;
+                    checkVersionStatus(); // Re-verificar después del countdown
+                    updateBtnText.style.display = 'flex';
+                    updateSpinner.style.display = 'none';
                 }
             }, 1000);
         });
@@ -711,6 +770,11 @@
             updateBtnText.style.gap = '8px';
             updateSpinner.style.display = 'none';
             updateBtn.disabled = false;
+
+            // Re-verificar estado de versión después de eventos importantes
+            if (status.type === 'up-to-date' || status.type === 'downloaded') {
+                setTimeout(() => checkVersionStatus(), 2000);
+            }
 
             // Ocultar notificación después de 6 segundos
             setTimeout(() => {

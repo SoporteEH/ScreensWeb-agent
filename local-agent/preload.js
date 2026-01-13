@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld('electron', {
 
     sendAction: (action, data) => ipcRenderer.send('agent-action', { action, data }),
 
+    // Obtener versión de la app
+    getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+
     // Controles de ventana
     minimizeWindow: () => ipcRenderer.send('window-control', 'minimize'),
     closeWindow: () => ipcRenderer.send('window-control', 'close')
