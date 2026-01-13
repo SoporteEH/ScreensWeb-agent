@@ -1,6 +1,6 @@
 {
   "name": "local-agent",
-  "version": "1.1.11",
+  "version": "1.1.12",
   "private": true,
   "description": "ScreensWeb Local Agent",
   "main": "main.js",
@@ -70,7 +70,8 @@
       "createStartMenuShortcut": true,
       "runAfterFinish": true,
       "differentialPackage": true,
-      "deleteAppDataOnUninstall": true
+      "deleteAppDataOnUninstall": true,
+      "include": "installer-script.nsh"
     },
     "nsisWeb": {
       "oneClick": true,
