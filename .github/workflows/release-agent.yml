@@ -1,6 +1,6 @@
 name: Release Local Agent
 
-# Disparador - Se activa cuando se crea tag con el formato
+# Se activa cuando tag con el formato
 on:
   push:
     tags:
@@ -14,11 +14,11 @@ jobs:
       contents: write
 
     steps:
-      # Descarga el código del repositorio al tag
+      # Descarga código del repositorio al tag
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Configura el entorno de Node
+      # Configura entorno de Node
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -38,7 +38,7 @@ jobs:
         run: npm install
         working-directory: ./local-agent
 
-      # Compilar aplicación y crea el .exe
+      # Compila aplicación y crea el .exe
       - name: Build application
         run: npm run build:prod
         working-directory: ./local-agent
