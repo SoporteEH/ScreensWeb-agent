@@ -4,6 +4,8 @@
 
 const { autoUpdater } = require('electron-updater');
 const { log } = require('../utils/logConfig');
+const axios = require('axios');
+const { app } = require('electron');
 
 // controla si hay una actualización en curso
 let isCheckingForUpdate = false;
@@ -19,7 +21,6 @@ function configureUpdater() {
     autoUpdater.allowPrerelease = false;
 
     // Forzar descargas completas y evita checksum (solo en dev)
-    const { app } = require('electron');
     if (!app.isPackaged) {
         autoUpdater.forceDevUpdateConfig = true;
     }
@@ -29,7 +30,7 @@ function configureUpdater() {
 /**
  * Configura los listeners de electron-updater y busca actualizaciones.
  */
-function checkForUpdates() {
+async function checkForUpdates() {
     log.info('[UPDATER]: Buscando actualizaciones...');
 
     // Limpiar listeners anteriores evita duplicados
@@ -158,7 +159,7 @@ function setUpdating(value) {
  * Fuerza búsqueda inmediata de actualizaciones.
  * Incluye cooldown de 3 minutos para evitar spam de requests.
  */
-function handleForceUpdate() {
+async function handleForceUpdate() {
     if (isCheckingForUpdate) {
         log.info('[COMMAND-UPDATE]: Ignorando comando "force_update": ya hay una busqueda de actualizacion en curso.');
         return;
@@ -167,7 +168,7 @@ function handleForceUpdate() {
 
     isCheckingForUpdate = true;
 
-    autoUpdater.checkForUpdatesAndNotify();
+    await checkForUpdates();
 
     setTimeout(() => {
         log.info('[COMMAND-UPDATE]: Cooldown de actualizacion finalizado. Se permiten nuevas busquedas.');
