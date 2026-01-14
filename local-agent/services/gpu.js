@@ -54,13 +54,32 @@ function configureGpu() {
 
 
 function configureMemory() {
-    app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
-    app.commandLine.appendSwitch('disk-cache-size', '10485760'); // 10MB
-    app.commandLine.appendSwitch('media-cache-size', '10485760'); // 10MB
+    // Limitar heap de JavaScript a 384MB (reducido de 512MB)
+    app.commandLine.appendSwitch('js-flags', '--max-old-space-size=384 --max-semi-space-size=2');
+
+    // Limitar número de procesos renderer a 3
+    app.commandLine.appendSwitch('renderer-process-limit', '3');
+
+    // Reducir cachés a 5MB cada uno (antes 10MB)
+    app.commandLine.appendSwitch('disk-cache-size', '5242880');
+    app.commandLine.appendSwitch('media-cache-size', '5242880');
+
+    // Deshabilitar caché HTTP
+    app.commandLine.appendSwitch('disable-http-cache');
+
+    // Deshabilitar features innecesarias de Chromium
+    app.commandLine.appendSwitch('disable-features',
+        'MediaRouter,AudioServiceOutOfProcess,CalculateNativeWinOcclusion,HardwareMediaKeyHandling');
+
+    // Deshabilitar servicios no utilizados
     app.commandLine.appendSwitch('disable-extensions');
     app.commandLine.appendSwitch('disable-sync');
     app.commandLine.appendSwitch('disable-translate');
     app.commandLine.appendSwitch('disable-background-networking');
+    app.commandLine.appendSwitch('disable-notifications');
+    app.commandLine.appendSwitch('disable-domain-reliability');
+
+    log.info('[MEMORY]: Configuración de optimización de memoria aplicada');
 }
 
 

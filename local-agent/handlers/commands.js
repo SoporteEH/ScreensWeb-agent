@@ -80,8 +80,11 @@ function createContentWindow(display, urlToLoad, command) {
             // Solo URLs seguras deberian llegar aquí (validadas en backend).
             webSecurity: false,
             allowRunningInsecureContent: true,
-            backgroundThrottling: false,
-            devTools: !app.isPackaged,
+            backgroundThrottling: true,
+            devTools: false,
+            spellcheck: false,
+            enableWebSQL: false,
+            navigateOnDragDrop: false,
         }
     });
 

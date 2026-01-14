@@ -22,7 +22,14 @@ function startProvisioningMode(context) {
         height: 400,
         center: true,
         icon: path.join(__dirname, '../icons/icon.ico'),
-        webPreferences: { preload: path.join(__dirname, '../preload.js') },
+        webPreferences: {
+            preload: path.join(__dirname, '../preload.js'),
+            contextIsolation: true,
+            nodeIntegration: false,
+            spellcheck: false,
+            backgroundThrottling: true,
+            devTools: false
+        },
         title: "Vinculación de CUOTAS",
         backgroundColor: '#0a0a0a',
         frame: false,

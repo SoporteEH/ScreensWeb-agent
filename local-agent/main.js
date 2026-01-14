@@ -9,6 +9,8 @@ const path = require('path');
 const fs = require('fs');
 const { exec } = require('child_process');
 
+// Habilitar GC manual para optimización de memoria
+app.commandLine.appendSwitch('js-flags', '--expose-gc');
 
 log.info('ScreensWeb Agent starting... (Mode: Safe-Update)');
 
@@ -184,6 +186,14 @@ try {
             }
         });
     }, 30 * 60 * 1000);
+
+    // Limpieza periódica de memoria con GC manual
+    setInterval(() => {
+        if (global.gc) {
+            global.gc();
+            log.info('[MEMORY]: Manual garbage collection ejecutado');
+        }
+    }, 5 * 60 * 1000); // Cada 5 minutos
 
 
 
