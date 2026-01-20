@@ -1,0 +1,42 @@
+[
+    {
+        "name": "Live 1",
+        "url": "https://scr01.luckiaretail.es/liveofferscreen/?lang=es&screen=1",
+        "category": "Live"
+    },
+    {
+        "name": "Live 2",
+        "url": "https://scr01.luckiaretail.es/liveofferscreen/?lang=es&screen=2",
+        "category": "Live"
+    },
+    {
+        "name": "Lotería",
+        "url": "https://scr01.luckiaretail.es/lottosimulator/?lang=es#results",
+        "category": "Loteria"
+    },
+    {
+        "name": "Luckia TV",
+        "url": "https://lcr.sportradar.com",
+        "category": "LuckiaTV"
+    },
+    {
+        "name": "SIS",
+        "url": "http://89.6.150.80:8080/",
+        "category": "Stream"
+    },
+    {
+        "name": "Publicidad General",
+        "url": "https://c.bannerflow.net/scripts/iframe?did=5cf6638e8e4e100001a17710&deeplink=on&a=67c6c1a64135fc1c9bb7e7e5&redirecturl=",
+        "category": "Publicidad"
+    },
+    {
+        "name": "Publicidad Terceros",
+        "url": "https://c.bannerflow.net/scripts/iframe?did=5cf6638e8e4e100001a17710&deeplink=on&a=67c6c1ab4135fc1c9bb7e7e9&redirecturl=",
+        "category": "Publicidad"
+    },
+    {
+        "name": "Publicidad Especial",
+        "url": "https://c.bannerflow.net/scripts/iframe?did=5cf6638e8e4e100001a17710&deeplink=on&a=67c6c1b04135fc1c9bb7e7ed&redirecturl=",
+        "category": "Publicidad"
+    }
+]

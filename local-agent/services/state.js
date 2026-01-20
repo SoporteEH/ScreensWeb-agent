@@ -1,19 +1,16 @@
-/**
- * State Service
- * Gestiona mapeo de pantallas y persistencia de estado
- */
-
 const { screen } = require('electron');
 const fs = require('fs');
 const { log } = require('../utils/logConfig');
 const { STATE_FILE_PATH } = require('../config/constants');
 
-// Construye mapa de pantallas ordenado por posición
+/**
+ * Build display map ordered by physical position (left-to-right).
+ */
 async function buildDisplayMap(hardwareIdToDisplayMap) {
     hardwareIdToDisplayMap.clear();
     const displays = screen.getAllDisplays();
 
-    // Ordena pantallas por posición X (izquierda a derecha)
+    // Sort by X position for consistent screen numbering
     displays.sort((a, b) => a.bounds.x - b.bounds.x);
 
     displays.forEach((display, index) => {
@@ -24,13 +21,17 @@ async function buildDisplayMap(hardwareIdToDisplayMap) {
     log.info('[DISPLAY_MAP]: Mapa de pantallas actualizado:', Array.from(hardwareIdToDisplayMap.keys()));
 }
 
-// Carga último estado desde archivo JSON
+/**
+ * Load persisted state from disk. Handles migration from old string-only states.
+ */
 function loadLastState() {
     try {
         if (fs.existsSync(STATE_FILE_PATH)) {
             const state = JSON.parse(fs.readFileSync(STATE_FILE_PATH, 'utf8')) || {};
             const migratedState = {};
+
             for (const [key, value] of Object.entries(state)) {
+                // Ensure state matches the current rich object format
                 if (typeof value === 'string') {
                     migratedState[key] = {
                         url: value,
@@ -41,58 +42,43 @@ function loadLastState() {
                     migratedState[key] = value;
                 }
             }
-            if (JSON.stringify(state) !== JSON.stringify(migratedState)) {
-                fs.writeFileSync(STATE_FILE_PATH, JSON.stringify(migratedState, null, 2));
-            }
             return migratedState;
         }
     } catch (error) {
-        log.error('[STATE]: Error al leer o parsear el archivo de estado:', error);
+        log.error('[STATE]: Error al leer el archivo de estado:', error);
     }
     return {};
 }
 
 /**
- * Limpia el estado de pantallas que ya no existen.
- * @param {Map} hardwareIdToDisplayMap
+ * Remove entries for monitors that are no longer physically connected.
  */
 function cleanOrphanedState(hardwareIdToDisplayMap) {
     const state = loadLastState();
     const validIds = Array.from(hardwareIdToDisplayMap.keys());
     const cleanedState = {};
 
-    for (const [id, url] of Object.entries(state)) {
+    for (const [id, data] of Object.entries(state)) {
         if (validIds.includes(id)) {
-            cleanedState[id] = url;
+            cleanedState[id] = data;
         } else {
-            log.info(`[STATE]: Limpiando entrada huérfana para pantalla inexistente: ${id}`);
+            log.info(`[STATE]: Limpiando entrada huerfana para pantalla ${id}`);
         }
     }
-
-    try {
-        fs.writeFileSync(STATE_FILE_PATH, JSON.stringify(cleanedState, null, 2));
-    } catch (error) {
-        log.error('[STATE]: Error al limpiar estado huérfano:', error);
-    }
-
     return cleanedState;
 }
 
 /**
- * Configura un timer de auto-refresh para una pantalla específica.
+ * Setup a recursive refresh timer for a specific window.
  */
 function setupAutoRefresh(screenIndex, intervalMinutes, managedWindows, autoRefreshTimers) {
     const intervalMs = intervalMinutes * 60 * 1000;
 
-    log.info(`[AUTO-REFRESH]: Configurando auto-refresh cada ${intervalMinutes} minutos para pantalla ${screenIndex}`);
-
     const timerId = setInterval(() => {
         const win = managedWindows.get(screenIndex);
         if (win && !win.isDestroyed()) {
-            log.info(`[AUTO-REFRESH]: Recargando pantalla ${screenIndex} (programado cada ${intervalMinutes}min)`);
             win.webContents.reload();
         } else {
-            log.info(`[AUTO-REFRESH]: Ventana ${screenIndex} no existe, limpiando timer`);
             clearInterval(timerId);
             autoRefreshTimers.delete(screenIndex);
         }
@@ -102,20 +88,21 @@ function setupAutoRefresh(screenIndex, intervalMinutes, managedWindows, autoRefr
 }
 
 /**
- * Guarda el estado actual de una pantalla.
+ * Save current screen configuration and manage auto-refresh timers.
  */
-function saveCurrentState(screenIndex, url, credentials, refreshInterval, autoRefreshTimers, managedWindows) {
+function saveCurrentState(screenIndex, url, credentials, refreshInterval, autoRefreshTimers, managedWindows, contentName) {
     let state = loadLastState();
 
+    // Reset previous timer for this slot
     if (autoRefreshTimers.has(screenIndex)) {
         clearInterval(autoRefreshTimers.get(screenIndex));
         autoRefreshTimers.delete(screenIndex);
-        log.info(`[AUTO-REFRESH]: Timer limpiado para pantalla ${screenIndex}`);
     }
 
     if (url) {
         state[screenIndex] = {
             url: url,
+            contentName: contentName || null,
             credentials: credentials || null,
             refreshInterval: refreshInterval || 0,
             timestamp: new Date().toISOString()
@@ -129,47 +116,42 @@ function saveCurrentState(screenIndex, url, credentials, refreshInterval, autoRe
     }
 
     try {
+        const dir = require('path').dirname(STATE_FILE_PATH);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(STATE_FILE_PATH, JSON.stringify(state, null, 2));
-        log.info(`[STATE]: Estado guardado para pantalla ${screenIndex}: ${url || '(vacío)'}${refreshInterval ? ` (auto-refresh: ${refreshInterval}min)` : ''}`);
     } catch (error) {
         log.error('[STATE]: Error al guardar estado:', error);
     }
 }
 
 /**
- * Restaura las URLs guardadas.
+ * Re-launch content windows based on the last saved session state.
  */
 function restoreLastState(hardwareIdToDisplayMap, handleShowUrlCallback) {
-    log.info('[STATE]: Iniciando restauracion de estado...');
+    log.info('[STATE]: Restaurando sesion...');
     const lastState = cleanOrphanedState(hardwareIdToDisplayMap);
 
-    if (Object.keys(lastState).length === 0) {
-        log.info('[STATE]: No hay estado previo para restaurar (archivo vacio o no existe).');
-        return;
-    }
-
-    log.info('[STATE]: Restaurando ultimo estado conocido:', JSON.stringify(lastState, null, 2));
+    if (Object.keys(lastState).length === 0) return;
 
     let restoredCount = 0;
     for (const [stableId, screenData] of Object.entries(lastState)) {
         if (hardwareIdToDisplayMap.has(stableId)) {
-            log.info(`[STATE]: Restaurando pantalla ${stableId} con URL: ${screenData.url}${screenData.refreshInterval ? ` (auto-refresh: ${screenData.refreshInterval}min)` : ''}`);
             const command = {
                 action: 'show_url',
                 screenIndex: stableId,
                 url: screenData.url,
                 credentials: screenData.credentials || null,
-                refreshInterval: screenData.refreshInterval || 0
+                refreshInterval: screenData.refreshInterval || 0,
+                contentName: screenData.contentName || null
             };
 
+            // Stagger loading to prevent resource spikes at boot
             setTimeout(() => {
                 handleShowUrlCallback(command);
             }, 500 * restoredCount);
             restoredCount++;
         }
     }
-
-    log.info(`[STATE]: Restauracion completada. ${restoredCount} pantallas restauradas.`);
 }
 
 module.exports = {

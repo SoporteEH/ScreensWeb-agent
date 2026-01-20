@@ -1,66 +1,52 @@
-/**
- * Tray Service - Gestiona el icono en la bandeja de sistema
- */
-
-const { Tray, Menu, app, BrowserWindow } = require('electron');
+const { Tray, Menu, app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { log } = require('../utils/logConfig');
 
 let tray = null;
 let controlWindow = null;
 
-// Inicializa icono de bandeja
-function createTray(serverUrl, version) {
+/**
+ * Initialize System Tray with context menu.
+ */
+function createTray(version) {
     if (tray) return tray;
 
     try {
-
         const iconPath = path.join(__dirname, '..', 'icons', 'icon.png');
         tray = new Tray(iconPath);
 
         const contextMenu = Menu.buildFromTemplate([
-            { label: `ScreensWeb Agent v${version}`, enabled: false },
-            { label: 'Servidor: ' + (serverUrl || 'No configurado'), enabled: false },
+            { label: `Screens v${version}`, enabled: false },
+            { label: 'Modo: Standalone (Local)', enabled: false },
             { type: 'separator' },
             {
                 label: 'Abrir Panel de Control',
-                click: () => openControlWindow(serverUrl, version)
+                click: () => openControlWindow(version)
             },
             { type: 'separator' },
             {
-                label: 'Reiniciar Agente',
+                label: 'Reiniciar App',
                 click: () => {
-                    log.info('[TRAY]: Reiniciando agente...');
+                    log.info('[TRAY]: Solicitando reinicio...');
                     app.relaunch();
                     app.exit(0);
-                }
-            },
-            {
-                label: 'Buscar Actualización',
-                click: () => {
-                    const { handleForceUpdate } = require('./updater');
-                    handleForceUpdate();
                 }
             },
             { type: 'separator' },
             {
                 label: 'Salir',
                 click: () => {
-                    log.info('[TRAY]: Saliendo de la aplicación...');
+                    log.info('[TRAY]: Cerrando aplicacion...');
                     app.isQuitting = true;
                     app.quit();
                 }
             }
         ]);
 
-        tray.setToolTip('ScreensWeb Agent');
+        tray.setToolTip('Screens');
         tray.setContextMenu(contextMenu);
 
-
-        tray.on('double-click', () => {
-            openControlWindow(serverUrl, version);
-        });
-
+        tray.on('double-click', () => openControlWindow(version));
         return tray;
     } catch (error) {
         log.error('[TRAY]: Error al crear el tray icon:', error);
@@ -68,17 +54,19 @@ function createTray(serverUrl, version) {
     }
 }
 
-// Abre ventana de control
-function openControlWindow(serverUrl, version) {
+/**
+ * Window Management: Centralized Control Panel
+ */
+function openControlWindow(version) {
     if (controlWindow) {
         controlWindow.focus();
         return;
     }
 
     controlWindow = new BrowserWindow({
-        width: 420,
-        height: 600,
-        title: 'ScreensWeb Control',
+        width: 950,
+        height: 700,
+        title: 'Screens Control',
         icon: path.join(__dirname, '..', 'icons', 'icon.png'),
         frame: false,
         resizable: false,
@@ -93,12 +81,10 @@ function openControlWindow(serverUrl, version) {
 
     controlWindow.loadFile(path.join(__dirname, '..', 'control.html'));
 
-
     controlWindow.webContents.on('did-finish-load', () => {
         controlWindow.webContents.send('agent-info', {
-            serverUrl: serverUrl || 'Desconocido',
             version: version || '1.0.0',
-            status: 'Online'
+            status: 'Standalone'
         });
     });
 
@@ -106,24 +92,29 @@ function openControlWindow(serverUrl, version) {
         controlWindow = null;
     });
 
+    /**
+     * RESOURCE THROTTLING (Optimization C)
+     * Suspend rendering of the control panel when minimized to save CPU/RAM.
+     */
+    controlWindow.on('minimize', () => {
+        controlWindow.webContents.setBackgroundThrottling(true);
+        log.info('[MEMORY]: Panel de Control hibernado (minimizacion).');
+    });
+
+    controlWindow.on('restore', () => {
+        controlWindow.webContents.setBackgroundThrottling(false);
+        log.info('[MEMORY]: Panel de Control restaurado.');
+    });
 
     controlWindow.setMenuBarVisibility(false);
 
-
-    const { ipcMain } = require('electron');
-    ipcMain.removeAllListeners('window-control');
+    // Global window actions for the custom frameless titlebar
     ipcMain.on('window-control', (event, action) => {
         if (controlWindow && !controlWindow.isDestroyed()) {
-            if (action === 'minimize') {
-                controlWindow.minimize();
-            } else if (action === 'close') {
-                controlWindow.close();
-            }
+            if (action === 'minimize') controlWindow.minimize();
+            else if (action === 'close') controlWindow.close();
         }
     });
 }
 
-module.exports = {
-    createTray,
-    openControlWindow
-};
+module.exports = { createTray, openControlWindow };

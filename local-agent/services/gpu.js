@@ -1,8 +1,3 @@
-/**
- * GPU Management Service
- * Detecta y gestiona aceleración por hardware
- */
-
 const { app } = require('electron');
 const fs = require('fs');
 const path = require('path');
@@ -10,7 +5,10 @@ const { log } = require('../utils/logConfig');
 
 const GPU_CONFIG_FILE = path.join(app.getPath('userData'), 'gpu-config.json');
 
-// Verifica si la GPU falló anteriormente
+/**
+ * Persistence for GPU failure state.
+ * Prevents continuous crashing by disabling hardware acceleration if needed.
+ */
 function hasGpuFailed() {
     try {
         if (fs.existsSync(GPU_CONFIG_FILE)) {
@@ -21,16 +19,17 @@ function hasGpuFailed() {
     return false;
 }
 
-// Marca la GPU como fallida para futuros inicios
 function markGpuAsFailed() {
     try {
-        fs.writeFileSync(GPU_CONFIG_FILE, JSON.stringify({ gpuFailed: true, failedAt: new Date().toISOString() }));
+        fs.writeFileSync(GPU_CONFIG_FILE, JSON.stringify({
+            gpuFailed: true,
+            failedAt: new Date().toISOString()
+        }));
         log.info('[GPU]: Marcada como fallida. Proximo inicio usara renderizado por software.');
     } catch (e) {
         log.error('[GPU]: Error guardando estado:', e);
     }
 }
-
 
 function resetGpuState() {
     try {
@@ -40,49 +39,47 @@ function resetGpuState() {
     } catch (e) { }
 }
 
-
+/**
+ * Determine if hardware acceleration should be enabled.
+ */
 function configureGpu() {
     if (hasGpuFailed()) {
-        log.info('[GPU]: GPU marcada como fallida anteriormente. Usando renderizado por software.');
+        log.info('[GPU]: Fallo anterior detectado. Usando renderizado por software (Fallback).');
         app.disableHardwareAcceleration();
     } else {
         log.info('[GPU]: Usando aceleracion de hardware...');
-
         app.commandLine.appendSwitch('enable-gpu-rasterization');
     }
 }
 
-
+/**
+ * Constrains Chromium processes to prevent system-wide slowdowns.
+ */
 function configureMemory() {
-    // Limitar heap de JavaScript a 384MB (reducido de 512MB)
+    // JavaScript limits
     app.commandLine.appendSwitch('js-flags', '--max-old-space-size=384 --max-semi-space-size=2');
 
-    // Limitar número de procesos renderer a 3
+    // Process limits
     app.commandLine.appendSwitch('renderer-process-limit', '3');
 
-    // Reducir cachés a 5MB cada uno (antes 10MB)
+    // Cache limits (5MB)
     app.commandLine.appendSwitch('disk-cache-size', '5242880');
     app.commandLine.appendSwitch('media-cache-size', '5242880');
 
-    // Deshabilitar caché HTTP
+    // Disable resource-heavy features
     app.commandLine.appendSwitch('disable-http-cache');
-
-    // Deshabilitar features innecesarias de Chromium
-    app.commandLine.appendSwitch('disable-features',
-        'MediaRouter,AudioServiceOutOfProcess,CalculateNativeWinOcclusion,HardwareMediaKeyHandling');
-
-    // Deshabilitar servicios no utilizados
+    app.commandLine.appendSwitch('disable-features', 'MediaRouter,AudioServiceOutOfProcess,CalculateNativeWinOcclusion,HardwareMediaKeyHandling');
     app.commandLine.appendSwitch('disable-extensions');
     app.commandLine.appendSwitch('disable-sync');
     app.commandLine.appendSwitch('disable-translate');
     app.commandLine.appendSwitch('disable-background-networking');
     app.commandLine.appendSwitch('disable-notifications');
     app.commandLine.appendSwitch('disable-domain-reliability');
-
-    log.info('[MEMORY]: Configuración de optimización de memoria aplicada');
 }
 
-
+/**
+ * Handle unexpected GPU or renderer crashes.
+ */
 function registerGpuCrashHandlers() {
     app.on('gpu-process-crashed', (event, killed) => {
         log.error(`[GPU]: Proceso GPU crasheo (killed: ${killed}). Marcando para fallback.`);
@@ -91,7 +88,7 @@ function registerGpuCrashHandlers() {
 
     app.on('render-process-gone', (event, webContents, details) => {
         if (details.reason === 'crashed' || details.reason === 'gpu-dead') {
-            log.error(`[GPU]: Proceso de renderizado fallo (razon: ${details.reason}). Marcando GPU como fallida.`);
+            log.error(`[GPU]: Renderizado fallo (razon: ${details.reason}). Marcando GPU como fallida.`);
             markGpuAsFailed();
         }
     });

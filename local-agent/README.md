@@ -1,280 +1,128 @@
-# ScreensWeb Agent
+# Screens Standalone
 
-Desktop application for Windows-based digital signage systems. Connects to the ScreensWeb central platform via WebSockets and manages content display across multiple physical screens.
+Desktop application for Windows-based digital signage systems. **Screens** is a monolithic standalone application designed for reliable content display across multiple physical screens without external server dependencies.
 
 ## Table of Contents
 
 - [Overview](#overview)
-- [Features](#features)
+- [Key Features](#key-features)
 - [Architecture](#architecture)
 - [Technology Stack](#technology-stack)
 - [Requirements](#requirements)
 - [Installation](#installation)
-- [Configuration](#configuration)
-- [Development](#development)
-- [Build and Distribution](#build-and-distribution)
-- [Auto-Update System](#auto-update-system)
 - [Project Structure](#project-structure)
-- [Troubleshooting](#troubleshooting)
+- [Maintenance & Optimizations](#maintenance--optimizations)
 
 ## Overview
 
-The ScreensWeb Agent is installed on venue PCs to display dynamic content on one or more screens. It maintains a persistent WebSocket connection to the central platform and executes remote commands in real-time.
+**Screens** is installed on venue PCs to display and manage digital content (URLs or local media) across multiple monitors. Unlike previous versions, this app functions 100% offline and is controlled entirely through its local **Control Panel**.
 
 **Core Responsibilities:**
-- Establish and maintain WebSocket connection to ScreensWeb backend
-- Receive and execute commands (display URL, show local assets, close content, identify screens)
-- Detect and manage multiple physical displays
-- Display content in full-screen kiosk mode
-- Handle connection failures with automatic reconnection
-- Auto-update from GitHub Releases using electron-updater
+- Detect and manage multiple physical displays automatically.
+- Provide a local interface for content management (URLs, Luckia TV, Local Media).
+- Ensure high availability with automatic session restoration.
+- Optimize hardware usage for low-resource environments (4GB RAM).
+- Perform automatic maintenance (Garbage Collection, Cache clearing).
 
-## Features
+## Key Features
 
-**Multi-Monitor Support**
-- Automatic detection of physical displays
-- Predictable screen IDs (1, 2, 3) ordered left-to-right
-- Independent content management per screen
-- Position-based state persistence
+**Multi-Monitor Management**
+- **Hardware-based Mapping**: Displays are mapped to physical IDs (1, 2, 3...) based on their hardware connection.
+- **Kiosk Mode**: Content is displayed in borderless, full-screen windows.
+- **Identify Tool**: Flash screen numbers to easily match physical monitors with the UI.
 
-**Connectivity**
-- WebSocket connection with automatic reconnection
-- Offline operation with fallback content
-- Network monitoring and recovery
-- Centralized error logging to backend
+**Hardware Optimization**
+- **GPU Check**: Real-time diagnostic to ensure monitors are connected to the Dedicated GPU (crucial for performance).
+- **Memory Management**: Manual Garbage Collection triggered periodically to prevent memory leaks in long-running sessions.
+- **Hardware Acceleration**: Optimized Chromium flags for smooth video and animation playback.
 
-**Auto-Update**
-- CI/CD integration with GitHub Actions
-- Silent installation of updates
-- Version rollback support
-- Zero-downtime updates
+**Local Persistence**
+- **State Recovery**: If the PC restarts, Screens automatically restores the last URLs and programs assigned to each monitor.
+- **Credential Storage**: Securely saves Luckia TV credentials locally.
 
-**Security**
-- Encrypted configuration storage using electron-store
-- JWT-based authentication
-- Command validation with Zod schemas
-- Secure token refresh mechanism
-
-**Asset Management**
-- Local asset synchronization from central platform
-- Offline content playback capability
-- Automatic cleanup of obsolete files
+**Local Control Panel**
+- Centralized UI to send URLs to specific screens.
+- Real-time status of connected monitors and GPU health.
+- Quick actions: Refresh Screen, Restart App, Power Off.
 
 ## Architecture
 
-```
-┌─────────────────────────────┐
-│  ScreensWeb Backend         │
-│  (API + Socket.IO Server)   │
-└──────────────┬──────────────┘
-               │ WebSocket (WSS/WS)
-┌──────────────▼──────────────┐
-│     ScreensWeb Agent        │
-│     (Electron App)          │
-├─────────────────────────────┤
-│  Main Process               │
-│  - Connection Management    │
-│  - Command Handling         │
-│  - State Persistence        │
-├─────────────────────────────┤
-│  Renderer Processes         │
-│  - Content Windows          │
-│  - Identify Overlay         │
-│  - Provisioning UI          │
-└──────────────┬──────────────┘
-               │ Display Output
-┌──────────────▼──────────────┐
-│    Physical Monitors        │
-└─────────────────────────────┘
+```mermaid
+graph TD
+    A[Screens App] --> B[Control Panel UI]
+    A --> C[Display Manager]
+    A --> D[Hardware Services]
+    
+    C --> E[Screen 1 Window]
+    C --> F[Screen 2 Window]
+    C --> G[Screen 3 Window]
+    
+    D --> H[GPU Diagnostic]
+    D --> I[Manual GC Service]
+    D --> J[State Persistence]
+    
+    J -- JSON --> K[Local Storage]
 ```
 
 ## Technology Stack
 
-**Core:**
-- Electron 38.x
-- Node.js 18+
-- Socket.IO Client 4.x
-
-**Build & Distribution:**
-- electron-builder 24.x
-- electron-updater 6.x
-- GitHub Actions
-
-**Storage & Security:**
-- electron-store 8.1.0 (CommonJS compatible)
-- JWT authentication
-- Zod schema validation
-
-**Development:**
-- electron-log for logging
-- dotenv for environment configuration
+- **Framework:** Electron 38.x (Node.js 18+)
+- **Storage:** Local JSON files (`state.json`, `secrets.json`)
+- **Logging:** `electron-log` (Local rotation only)
+- **Styling:** Vanilla CSS / HTML for maximum performance
+- **Security:** Context Isolation & Preload scripts enabled.
 
 ## Requirements
 
-**Production (End User):**
-- Windows 10/11 (64-bit)
-- Network connectivity to ScreensWeb backend
-
-**Development:**
-- Windows 10/11
-- Node.js 18+
-- npm 9+
-- Git
+- **Operating System:** Windows 10/11 (64-bit)
+- **RAM:** Minimum 4GB (Optimized for low-memory PCs)
+- **GPU:** Dedicated graphics card (Recommended for multi-screen setups)
 
 ## Installation
 
-### Development Setup
-
+### Development
 ```bash
 git clone <repository-url>
 cd ScreensWeb-agent/local-agent
 npm install
-```
-
-### Production Installation
-
-Download the latest `.exe` installer from GitHub Releases and run it. The agent will:
-1. Install to `Program Files/ScreensWeb Agent`
-2. Create desktop shortcut
-3. Configure auto-start with Windows
-4. Launch provisioning mode on first run
-
-## Configuration
-
-The agent requires the backend server URL for operation.
-
-### Development Configuration
-
-Create a `.env` file in the `local-agent` directory:
-
-```env
-SERVER_URL=http://localhost:3000
-```
-
-### Production Configuration
-
-For production builds, the `SERVER_URL` is injected during the build process via `package.json` `extraMetadata` or GitHub Secrets.
-
-### Configuration Storage
-
-The agent stores its configuration in `electron-store`:
-- **Location:** `%APPDATA%\local-agent\ScreensWeb\config.json`
-- **Content:** `deviceId`, `agentToken` (encrypted)
-- **Reset:** Delete this file to return to provisioning mode
-
-## Development
-
-Start the agent in development mode:
-
-```bash
 npm start
 ```
 
-**Expected Behavior:**
-- **First Run:** Launches in Provisioning Mode, displays device ID for linking
-- **Configured:** Launches in Normal Mode, connects to backend automatically
-
-**Development Tools:**
-- DevTools enabled in development mode
-- Hot reload not supported (requires app restart)
-- Logs written to console and file (`%APPDATA%\local-agent\ScreensWeb\logs\`)
-
-## Build and Distribution
-
-Generate the Windows installer:
-
+### Production Build
+Generates a standalone installer (`.exe`).
 ```bash
 npm run build
 ```
-
-**Output:**
-- `dist/ScreensWebAgent-Setup-1.x.x.exe` - NSIS installer
-- `dist/latest.yml` - Update metadata for electron-updater
-- `dist/win-unpacked/` - Unpacked application files
-
-## Auto-Update System
-
-The agent uses `electron-updater` for seamless updates.
-
-### Release Process (Developer)
-
-1. Update version in `package.json`:
-   ```json
-   {
-     "version": "1.0.2"
-   }
-   ```
-
-2. Commit and create a git tag:
-   ```bash
-   git add package.json
-   git commit -m "Bump version to 1.0.2"
-   git tag v1.0.2
-   git push origin main --tags
-   ```
-
-3. GitHub Actions automatically:
-   - Builds the application
-   - Generates installer and `latest.yml`
-   - Creates a GitHub Release with artifacts
-
-### Update Process (Agent)
-
-1. Agent checks for updates periodically (configurable interval)
-2. Detects new version from `latest.yml`
-3. Downloads installer in background
-4. Prompts user or auto-installs (configurable)
-5. Restarts with new version
-
-**Configuration:**
-- Check interval: 4 hours (default)
-- Silent mode: enabled for production
-- Rollback: manual via GitHub Release
 
 ## Project Structure
 
 ```
 local-agent/
 ├── config/
-│   └── constants.js           # Centralized configuration (URLs, timeouts, paths)
+│   └── constants.js           # Local paths, timeouts, and hardware limits
 ├── handlers/
-│   ├── commands.js            # Remote command handlers (show_url, close_screen, etc.)
-│   └── provisioning.js        # Device provisioning flow
+│   └── commands.js            # Core UI command execution (show_url, close, refresh)
 ├── services/
-│   ├── assets.js              # Local asset synchronization
-│   ├── auth.js                # JWT token refresh
-│   ├── device.js              # Device registration and system commands
-│   ├── gpu.js                 # GPU configuration and crash handling
-│   ├── network.js             # Network connectivity monitoring
-│   ├── socket.js              # WebSocket connection management
-│   ├── state.js               # Screen state persistence
-│   ├── tray.js                # System tray icon and menu
-│   └── updater.js             # Auto-update orchestration
+│   ├── device.js              # Hardware ID and System commands
+│   ├── gpu.js                 # GPU config and memory optimization
+│   ├── gpuCheck.js            # Dedicated GPU connection diagnostic
+│   ├── state.js               # Screen session persistence (JSON)
+│   ├── tray.js                # System tray & Control Window management
 ├── utils/
-│   ├── configManager.js       # Configuration file management
-│   └── logConfig.js           # Logging configuration
-├── icons/                     # Application icons
-├── main.js                    # Main process orchestrator
-├── preload.js                 # Preload script for renderer security
-├── identify-preload.js        # Preload for screen identification
-├── control.html               # Control panel UI
-├── fallback.html              # Offline fallback page
-├── identify.html              # Screen identification overlay
-├── provision.html             # Provisioning mode UI
-├── package.json               # Project metadata and Electron config
-└── README.md                  # This file
+│   └── logConfig.js           # Local logging & rotation
+├── control.html               # Main Control Panel UI
+├── fallback.html              # Offline/Error fallback page
+├── identify.html              # Screen numbering overlay
+├── package.json               # dependencies and build scripts
 ```
 
-### Architecture Layers
+## Maintenance & Optimizations
 
-| Layer | Responsibility |
-|-------|----------------|
-| **main.js** | Application orchestration, event coordination |
-| **services/** | Independent modules with single responsibility |
-| **handlers/** | Command execution and user flows |
-| **config/** | Centralized constants and configuration |
-| **utils/** | Reusable utilities |
+### Memory Leaks
+Due to the persistent nature of digital signage, the app:
+1. Runs `global.gc()` every 4 hours.
+2. Clears Chromium cache every hour.
+3. Disables `backgroundThrottling` to ensure hidden windows or iframes keep rendering.
 
-## License
-
-##### Proprietary - All rights reserved
+### GPU Protection
+The built-in **GPU Diagnostic** checks if the primary display is running on the integrated Intel/AMD chip instead of the dedicated NVIDIA/AMD card, alerting the user to move the HDMI/DP cable.

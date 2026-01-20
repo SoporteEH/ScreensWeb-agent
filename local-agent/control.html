@@ -4,10 +4,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control Panel</title>
+    <title>Screens Control</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <style>
+        :root {
+            --color-primary: #cf6716;
+            --color-primary-hover: #b85a13;
+            --color-bg: #0a0a0a;
+            --color-surface: #1a1a1a;
+            --color-surface-alt: #1e1e1e;
+            --color-surface-brighter: #2c2c2c;
+            --color-border: #2c2c2c;
+            --color-border-hover: #3d3d3d;
+            --color-text: #ffffff;
+            --color-text-half: #aaaaaa;
+            --color-text-muted: #888888;
+            --color-text-dim: #666666;
+            --color-danger: #ef4444;
+            --color-danger-bg: rgba(239, 68, 68, 0.1);
+            --color-success: #22c55e;
+            --color-success-bg: rgba(34, 197, 94, 0.1);
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -15,51 +34,96 @@
         }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #1a1a1a;
-            color: #ffffff;
-            min-height: 100vh;
+            font-family: 'Inter', sans-serif;
+            background: var(--color-bg);
+            color: var(--color-text);
+            height: 100vh;
             display: flex;
             flex-direction: column;
-            padding: 0;
             overflow: hidden;
         }
 
-        /* Custom Title Bar */
         .title-bar {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            height: 32px;
-            background: #1a1a1a;
-            border-bottom: 1px solid #2c2c2c;
+            height: 36px;
+            background: var(--color-surface);
+            border-bottom: 1px solid var(--color-border);
             -webkit-app-region: drag;
             user-select: none;
             padding: 0 12px;
+            flex-shrink: 0;
+        }
+
+        .title-bar-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .title-bar-logo {
+            width: 20px;
+            height: 20px;
+            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover));
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .title-bar-logo .material-icons {
+            font-size: 14px;
+            color: white;
         }
 
         .title-bar-text {
-            font-size: 12px;
-            color: #888888;
+            font-size: 13px;
+            color: var(--color-text);
+            font-weight: 600;
+        }
+
+        .title-bar-version {
+            font-size: 11px;
+            color: var(--color-text-dim);
             font-weight: 500;
+        }
+
+        .station-tag {
+            font-size: 11px;
+            background: rgba(207, 103, 22, 0.15);
+            color: var(--color-primary);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+            border: 1px solid rgba(207, 103, 22, 0.3);
+            cursor: pointer;
+            transition: all 0.2s;
+            -webkit-app-region: no-drag;
+            position: relative;
+            z-index: 10;
+        }
+
+        .station-tag:hover {
+            background: rgba(207, 103, 22, 0.25);
+            border-color: var(--color-primary);
         }
 
         .title-bar-controls {
             display: flex;
-            gap: 8px;
+            gap: 4px;
             -webkit-app-region: no-drag;
         }
 
         .title-bar-button {
-            width: 24px;
-            height: 24px;
+            width: 28px;
+            height: 28px;
             display: flex;
             align-items: center;
             justify-content: center;
             border-radius: 4px;
             cursor: pointer;
             transition: background 0.15s;
-            background: transparent;
         }
 
         .title-bar-button:hover {
@@ -70,292 +134,229 @@
             background: #ef4444;
         }
 
-        .title-bar-button .material-icons {
-            font-size: 16px;
-            color: #888888;
-        }
-
-        .title-bar-button.close:hover .material-icons {
-            color: white;
-        }
-
-        .container {
+        .main-container {
             flex: 1;
             display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 24px;
+            gap: 16px;
+            padding: 16px;
+            overflow: hidden;
         }
 
-        .content-wrapper {
-            width: 100%;
-            max-width: 400px;
+        .screens-panel {
+            flex: 1;
             display: flex;
             flex-direction: column;
-            align-items: center;
+            min-width: 320px;
         }
 
-        /* Header */
-        .header {
-            width: 100%;
-            margin-bottom: 32px;
-            text-align: center;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .logo {
-            width: 48px;
-            height: 48px;
-            background: linear-gradient(135deg, #ff6600, #ff8533);
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(255, 102, 0, 0.3);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .logo .material-icons {
-            color: white;
-            font-size: 28px;
-        }
-
-        .title {
-            font-size: 24px;
-            font-weight: 700;
-            color: #ffffff;
-            letter-spacing: -0.5px;
-        }
-
-        .version-badge {
-            font-size: 13px;
-            color: #aaaaaa;
-            font-weight: 600;
-            margin-top: -4px;
-        }
-
-        /* Card */
-        .card {
-            width: 100%;
-            background: #2c2c2c;
-            border-radius: 12px;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
-            padding: 24px;
-            border: 1px solid #3d3d3d;
-        }
-
-        /* Status Section */
-        .status-section {
+        .panel-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding-bottom: 24px;
-            margin-bottom: 24px;
-            border-bottom: 1px solid rgba(61, 61, 61, 0.5);
+            margin-bottom: 12px;
         }
 
-        .status-label {
-            font-size: 14px;
-            font-weight: 500;
-            color: #888888;
-        }
-
-        .status-badge {
+        .panel-title {
             display: flex;
             align-items: center;
             gap: 8px;
-            background: rgba(34, 197, 94, 0.1);
-            padding: 6px 12px;
-            border-radius: 20px;
-            border: 1px solid rgba(34, 197, 94, 0.2);
-        }
-
-        .status-badge.offline {
-            background: rgba(239, 68, 68, 0.1);
-            border-color: rgba(239, 68, 68, 0.2);
-        }
-
-        .status-dot {
-            position: relative;
-            width: 10px;
-            height: 10px;
-        }
-
-        .status-dot::before {
-            content: '';
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            background: #1d9248;
-            border-radius: 50%;
-            animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
-            opacity: 0.75;
-        }
-
-        .status-dot::after {
-            content: '';
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            background: #1d9248;
-            border-radius: 50%;
-        }
-
-        .status-badge.offline .status-dot::before,
-        .status-badge.offline .status-dot::after {
-            background: #ef4444;
-        }
-
-        @keyframes ping {
-
-            75%,
-            100% {
-                transform: scale(2);
-                opacity: 0;
-            }
-        }
-
-        .status-text {
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 600;
-            color: #1da850;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            color: #ffffff;
         }
 
-        .status-badge.offline .status-text {
-            color: #ef4444;
+        .panel-title .material-icons {
+            font-size: 18px;
+            color: var(--color-primary);
         }
 
-        /* Buttons */
-        .actions {
+        .screens-count {
+            font-size: 11px;
+            color: var(--color-text-muted);
+            background: var(--color-surface-brighter);
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        .screens-list {
+            flex: 1;
+            overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 8px;
         }
 
-        .btn {
-            width: 100%;
+        .screen-card {
+            background: var(--color-surface);
+            border-radius: 8px;
+            padding: 12px;
+            border: 1px solid var(--color-border);
+            transition: border 0.2s;
+        }
+
+        .screen-card:hover {
+            border-color: var(--color-border-hover);
+        }
+
+        .screen-card.active {
+            border-left: 3px solid var(--color-success);
+        }
+
+        .screen-card.empty {
+            border-left: 3px solid #444444;
+        }
+
+        .screen-header {
             display: flex;
+            justify-content: space-between;
             align-items: center;
-            justify-content: center;
-            gap: 8px;
-            padding: 12px 16px;
+            margin-bottom: 8px;
+        }
+
+        .screen-badge {
+            background: var(--color-primary);
+            color: var(--color-text);
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .form-control {
+            width: 100%;
+            height: 36px;
+            padding: 0 10px;
+            background: var(--color-bg);
+            border: 1px solid var(--color-border);
             border-radius: 6px;
-            font-size: 14px;
-            font-weight: 500;
-            border: none;
-            cursor: pointer;
-            transition: all 0.2s ease;
+            color: var(--color-text);
+            font-size: 13px;
             font-family: inherit;
         }
 
-        .btn .material-icons {
-            font-size: 18px;
-            transition: transform 0.5s ease;
+        .form-control:focus {
+            outline: none;
+            border-color: var(--color-primary);
+        }
+
+        .small-input {
+            font-size: 12px;
+            padding: 4px 8px;
+            height: 28px;
+        }
+
+        .btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 0 45px;
+            height: 40px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            border: none;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-family: inherit;
         }
 
         .btn-primary {
-            background: #ff6600;
-            color: white;
-            box-shadow: 0 4px 6px rgba(255, 102, 0, 0.2);
+            background: var(--color-primary);
+            color: var(--color-text);
+            width: 100%;
         }
 
         .btn-primary:hover {
-            background: #e65c00;
-            box-shadow: 0 6px 12px rgba(255, 102, 0, 0.3);
-            transform: translateY(-1px);
-        }
-
-        .btn-primary:hover .material-icons {
-            transform: rotate(180deg);
-        }
-
-        .btn-primary:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none !important;
+            background: var(--color-primary-hover);
         }
 
         .btn-secondary {
+            background: #2c2c2c;
+            color: #aaaaaa;
+        }
+
+        .btn-secondary:hover {
             background: #3d3d3d;
             color: #ffffff;
         }
 
-        .btn-secondary:hover {
-            background: #4a4a4a;
+        .btn-mini {
+            padding: 2px 8px;
+            height: 28px;
+            font-size: 11px;
+            border-radius: 3px;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            color: white;
+            font-weight: 600;
+            text-transform: uppercase;
         }
 
-        .btn-secondary:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
+        .btn-mini.primary {
+            background: var(--color-primary);
         }
 
-        .btn-secondary .material-icons {
-            color: #888888;
+        .btn-mini.danger {
+            background: #ef4444;
         }
 
-        .btn-danger {
-            background: transparent;
-            color: #ef4444;
-            border: 1px solid rgba(239, 68, 68, 0.3);
+        .btn-mini.secondary {
+            background: #4b5563;
         }
 
-        .btn-danger:hover {
+        .gpu-badge {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            background: #1e1e1e;
+            border: 1px solid var(--color-border-hover);
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .gpu-badge.optimal {
+            border-color: #22c55e66;
+            background: rgba(34, 197, 94, 0.05);
+        }
+
+        .gpu-badge.warning {
+            border-color: #ef4444;
             background: rgba(239, 68, 68, 0.1);
+            animation: pulse-red 2s infinite;
         }
 
-        /* Spinner */
-        .spinner {
-            display: inline-block;
-            width: 14px;
-            height: 14px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-top-color: #fff;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
+        @keyframes pulse-red {
+            0% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+            }
 
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
+            70% {
+                box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
             }
         }
 
-        /* Footer */
-        .footer {
-            margin-top: 32px;
-            text-align: center;
-        }
-
-        .footer-text {
-            font-size: 12px;
-            color: #888888;
-            opacity: 0.8;
-            font-weight: 500;
-        }
-
-        /* Notification Toast */
         .notification {
             position: fixed;
-            bottom: 95px;
+            bottom: 20px;
             left: 50%;
             transform: translateX(-50%) translateY(100px);
             background: #1a1a1a;
-            color: #ffffff;
-            padding: 8px 16px;
+            padding: 10px 16px;
             border-radius: 6px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-            font-size: 11px;
-            font-weight: 500;
-            opacity: 0;
-            transition: all 300ms ease-in-out;
+            font-size: 12px;
+            transition: all 0.3s;
             z-index: 1000;
-            border: 1px solid #444444;
-            max-width: 85%;
-            white-space: nowrap;
+            border: 1px solid #2c2c2c;
         }
 
         .notification.show {
@@ -363,25 +364,20 @@
             transform: translateX(-50%) translateY(0);
         }
 
-        .notification.success {
-            border-color: #22c55e;
-            background: rgba(34, 197, 94, 0.15);
-            color: #22c55e;
+        .credentials-inline {
+            background: #2a2a2a;
+            padding: 8px;
+            border-radius: 4px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            margin-top: 8px;
         }
 
-        .notification.error {
-            border-color: #ef4444;
-            background: rgba(239, 68, 68, 0.15);
-            color: #ef4444;
+        .hidden {
+            display: none !important;
         }
 
-        .notification.info {
-            border-color: #ff6600;
-            background: rgba(255, 102, 0, 0.15);
-            color: #ff6600;
-        }
-
-        /* Custom Modal */
         .modal-overlay {
             position: fixed;
             top: 0;
@@ -401,93 +397,126 @@
         }
 
         .modal {
-            background: #2c2c2c;
+            background: #1a1a1a;
             border-radius: 12px;
-            padding: 24px;
-            max-width: 340px;
+            padding: 20px;
+            max-width: 320px;
             width: 90%;
-            border: 1px solid #3d3d3d;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-            animation: modalSlideIn 0.2s ease-out;
-        }
-
-        @keyframes modalSlideIn {
-            from {
-                opacity: 0;
-                transform: translateY(-20px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            border: 1px solid #2c2c2c;
         }
 
         .modal-title {
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 700;
-            color: #ffffff;
-            margin-bottom: 12px;
+            margin-bottom: 8px;
         }
 
         .modal-message {
-            font-size: 14px;
+            font-size: 13px;
             color: #888888;
-            line-height: 1.5;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
         }
 
         .modal-buttons {
             display: flex;
-            gap: 12px;
+            gap: 10px;
             justify-content: flex-end;
         }
 
         .modal-btn {
-            padding: 10px 20px;
-            border-radius: 6px;
-            font-size: 14px;
-            font-weight: 500;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
             cursor: pointer;
-            transition: all 0.2s;
             border: none;
-            font-family: inherit;
+        }
+
+        .btn-danger {
+            background: rgba(220, 38, 38, 0.1);
+            color: #ef4444;
+            border: 1px solid rgba(220, 38, 38, 0.3);
+            box-shadow: none;
+            width: 100%;
+            height: 48px;
+            justify-content: center;
+            padding: 0 16px;
+            gap: 12px;
+            text-transform: none;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .btn-danger:hover {
+            background: rgba(220, 38, 38, 0.2);
+            border-color: #ef4444;
+        }
+
+        /* Setup/Config Modal Specifics */
+        .setup-input {
+            width: 100%;
+            background: #000;
+            border: 1px solid var(--color-border);
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 16px;
+            margin: 20px 0;
+            text-align: center;
+            outline: none;
+        }
+
+        .setup-input:focus {
+            border-color: var(--color-primary);
         }
 
         .modal-btn-cancel {
             background: transparent;
             color: #888888;
-            border: 1px solid #3d3d3d;
-        }
-
-        .modal-btn-cancel:hover {
-            background: rgba(255, 255, 255, 0.05);
-            color: #ffffff;
+            border: 1px solid #2c2c2c;
         }
 
         .modal-btn-confirm {
-            background: #ff6600;
-            color: white;
-        }
-
-        .modal-btn-confirm:hover {
-            background: #e65c00;
+            background: var(--color-primary);
+            color: var(--color-text);
         }
 
         .modal-btn-confirm.danger {
-            background: #ef4444;
+            background: var(--color-danger);
         }
 
-        .modal-btn-confirm.danger:hover {
-            background: #dc2626;
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #3d3d3d;
+            border-radius: 3px;
+        }
+
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            appearance: none;
+            margin: 0;
+        }
+
+        input[type=number] {
+            appearance: textfield;
         }
     </style>
 </head>
 
 <body>
-    <!-- Custom Title Bar -->
     <div class="title-bar">
-        <span class="title-bar-text">Control Panel</span>
+        <div class="title-bar-left">
+            <div class="title-bar-logo">
+                <span class="material-icons">monitor</span>
+            </div>
+            <span class="title-bar-text">Screens</span>
+            <span class="title-bar-version" id="agent-version"></span>
+            <span id="station-name-display" class="station-tag" title="Click para cambiar nombre">Local</span>
+        </div>
         <div class="title-bar-controls">
             <div class="title-bar-button" id="btn-minimize">
                 <span class="material-icons">minimize</span>
@@ -498,61 +527,56 @@
         </div>
     </div>
 
-    <!-- Main Container -->
-    <div class="container">
-        <div class="content-wrapper">
-            <!-- Header -->
-            <div class="header">
-                <div class="logo">
-                    <span class="material-icons">grid_view</span>
+    <div class="main-container">
+        <div class="screens-panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span class="material-icons">desktop_windows</span>
+                    Pantallas Conectadas
                 </div>
-                <span class="version-badge" id="agent-version"></span>
+                <span class="screens-count" id="screens-count">0</span>
             </div>
+            <div class="screens-list" id="screens-list"></div>
+        </div>
 
-            <!-- Card -->
+        <div class="controls-panel">
             <div class="card">
-                <!-- Status -->
-                <div class="status-section">
-                    <span class="status-label">Estado</span>
-                    <div class="status-badge" id="status-container">
-                        <div class="status-dot"></div>
-                        <span class="status-text" id="agent-status">Online</span>
+                <div id="gpu-diagnostic-container">
+                    <div class="gpu-badge" id="gpu-badge">
+                        <span class="material-icons gpu-icon" id="gpu-icon">memory</span>
+                        <div class="gpu-info-text">
+                            <span class="gpu-label"
+                                style="font-weight:700; font-size:10px; color:#888; display:block;">GPU</span>
+                            <span class="gpu-name" id="gpu-name"
+                                style="color:#fff; font-weight:600; display:block; font-size:11px;">Cargando...</span>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Actions -->
-                <div class="actions">
-                    <button class="btn btn-primary" id="btn-restart">
+                <div class="agent-actions" style="display: flex; flex-direction: column; gap: 10px;">
+                    <button class="btn btn-secondary" id="btn-restart">
                         <span class="material-icons">restart_alt</span>
-                        <span>Reiniciar</span>
+                        Reiniciar App
                     </button>
-
                     <button class="btn btn-secondary" id="btn-update">
-                        <span id="update-btn-text">
-                            <span class="material-icons">sync</span>
-                            <span>Verificando...</span>
-                        </span>
-                        <span id="update-spinner" class="spinner" style="display: none;"></span>
+                        <span class="material-icons">system_update</span>
+                        Buscar Actualización
                     </button>
-
+                    <button class="btn btn-secondary" id="btn-logs">
+                        <span class="material-icons">description</span>
+                        Logs del Sistema
+                    </button>
+                    <hr style="border:0; border-top:1px solid #444;">
                     <button class="btn btn-danger" id="btn-quit">
                         <span class="material-icons">power_settings_new</span>
-                        <span>Cerrar App</span>
+                        Cerrar Aplicación
                     </button>
                 </div>
-            </div>
-
-            <!-- Footer -->
-            <div class="footer">
-                <div class="footer-text">ScreensWeb Agent © <span id="current-year"></span></div>
             </div>
         </div>
     </div>
 
-    <!-- Notification Toast -->
     <div id="notification" class="notification"></div>
-
-    <!-- Custom Modal -->
     <div id="modal-overlay" class="modal-overlay">
         <div class="modal">
             <div class="modal-title" id="modal-title"></div>
@@ -564,232 +588,348 @@
         </div>
     </div>
 
-    <script>
-        document.getElementById('current-year').textContent = new Date().getFullYear();
+    <!-- Setup Modal -->
+    <div id="setup-modal" class="modal-overlay" style="z-index: 2000;">
+        <div class="modal" style="max-width: 400px; text-align: center;">
+            <div class="modal-header"
+                style="margin-bottom:15px; border-bottom:1px solid var(--color-border); padding-bottom:10px;">
+                <h3 id="setup-modal-title" style="color:var(--color-primary);">Configuración Inicial</h3>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="setup-station-name" class="setup-input" placeholder="Nombre del Local"
+                    maxlength="30">
+            </div>
+            <div class="modal-footer" style="margin-top:20px; display: flex; gap: 10px;">
+                <button id="btn-cancel-setup" class="modal-btn-cancel hidden"
+                    style="flex: 1; height:44px; border-radius:8px; cursor:pointer;">Cancelar</button>
+                <button id="btn-save-setup" class="modal-btn-confirm"
+                    style="flex: 2; height:44px; border-radius:8px; border:none; cursor:pointer; font-weight:600;">Completar
+                    Instalación</button>
+            </div>
+        </div>
+    </div>
 
-        // Sistema de modal personalizado
-        let modalCallback = null;
+    <script>
+        /**
+         * GLOBAL STATE & REFS
+         */
+        let screens = [];
+        let presetsHtml = '';
+        const screensList = document.getElementById('screens-list');
+        const screensCount = document.getElementById('screens-count');
         const modalOverlay = document.getElementById('modal-overlay');
-        const modalTitle = document.getElementById('modal-title');
-        const modalMessage = document.getElementById('modal-message');
-        const modalConfirmBtn = document.getElementById('modal-confirm');
-        const modalCancelBtn = document.getElementById('modal-cancel');
+        let modalCallback = null;
+
+        function showNotification(message, type = 'info') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type} show`;
+            setTimeout(() => notification.classList.remove('show'), 4000);
+        }
 
         function showModal(title, message, confirmText = 'Aceptar', isDanger = false) {
             return new Promise((resolve) => {
-                modalTitle.textContent = title;
-                modalMessage.textContent = message;
-                modalConfirmBtn.textContent = confirmText;
-
-                // Aplicar estilo danger si es necesario
-                if (isDanger) {
-                    modalConfirmBtn.classList.add('danger');
-                } else {
-                    modalConfirmBtn.classList.remove('danger');
-                }
-
+                document.getElementById('modal-title').textContent = title;
+                document.getElementById('modal-message').textContent = message;
+                const confirmBtn = document.getElementById('modal-confirm');
+                confirmBtn.textContent = confirmText;
+                confirmBtn.classList.toggle('danger', isDanger);
                 modalOverlay.classList.add('show');
                 modalCallback = resolve;
             });
         }
 
-        function hideModal() {
-            modalOverlay.classList.remove('show');
+        function hideModal() { modalOverlay.classList.remove('show'); }
+
+        document.getElementById('modal-confirm').addEventListener('click', () => { hideModal(); if (modalCallback) modalCallback(true); });
+        document.getElementById('modal-cancel').addEventListener('click', () => { hideModal(); if (modalCallback) modalCallback(false); });
+
+        /**
+         * RENDER LOGIC
+         */
+        async function loadScreens() {
+            try {
+                screens = await window.electron.getScreens();
+                renderScreensList();
+            } catch (error) { console.error('Error loading screens:', error); }
         }
 
-        modalConfirmBtn.addEventListener('click', () => {
-            hideModal();
-            if (modalCallback) modalCallback(true);
-        });
+        function renderScreensList() {
+            const isEditing = document.activeElement &&
+                (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT') &&
+                screensList.contains(document.activeElement);
 
-        modalCancelBtn.addEventListener('click', () => {
-            hideModal();
-            if (modalCallback) modalCallback(false);
-        });
-
-        // Cerrar modal al hacer click fuera
-        modalOverlay.addEventListener('click', (e) => {
-            if (e.target === modalOverlay) {
-                hideModal();
-                if (modalCallback) modalCallback(false);
-            }
-        });
-
-        // Interfaz Electron
-        let agentServerUrl = null;
-        console.log('[INIT] Control panel script loaded');
-
-        window.electron.onAgentInfo((info) => {
-            document.getElementById('agent-version').textContent = 'v' + info.version;
-
-            // Guardar server URL para version check
-            if (info.serverUrl && !agentServerUrl) {
-                agentServerUrl = info.serverUrl;
-                console.log('[AGENT INFO] Server URL set to:', agentServerUrl);
-                // Intentar check de versión ahora que tenemos la URL
-                setTimeout(() => checkVersionStatus(), 500);
-            }
-
-            const statusBadge = document.getElementById('status-container');
-            const statusText = document.getElementById('agent-status');
-
-            if (info.status === 'Online') {
-                statusBadge.classList.remove('offline');
-                statusText.textContent = 'Online';
-            } else {
-                statusBadge.classList.add('offline');
-                statusText.textContent = info.status;
-            }
-        });
-
-        // Botón reiniciar
-        document.getElementById('btn-restart').addEventListener('click', async () => {
-            const confirmed = await showModal(
-                'Reiniciar',
-                'La aplicación se cerrará y volverá a iniciarse automáticamente.',
-                'Reiniciar'
-            );
-            if (confirmed) {
-                window.electron.sendAction('restart');
-            }
-        });
-
-        // Botón cerrar
-        document.getElementById('btn-quit').addEventListener('click', async () => {
-            const confirmed = await showModal(
-                'Cerrar',
-                'La aplicación se cerrará completamente.',
-                'Cerrar',
-                true
-            );
-            if (confirmed) {
-                window.electron.sendAction('quit');
-            }
-        });
-
-        // actualizar
-        const updateBtn = document.getElementById('btn-update');
-        const updateBtnText = document.getElementById('update-btn-text');
-        const updateSpinner = document.getElementById('update-spinner');
-        let updateAvailable = false;
-
-        // Verifica versión en el servidor
-        async function checkVersionStatus() {
-            if (!agentServerUrl) {
-                console.log('[VERSION CHECK] Waiting for server URL...');
+            if (isEditing) {
+                // Background update of status only
+                screens.forEach(screen => {
+                    const card = document.querySelector(`.screen-card[data-id="${screen.id}"]`);
+                    if (card) {
+                        const statusDiv = card.querySelector('.screen-current-status');
+                        const statusHtml = screen.hasContent ?
+                            `<div style="color:var(--color-success); display:flex; align-items:center; gap:5px; font-weight:600;">
+                                <span class="material-icons" style="font-size:16px;">play_circle</span>
+                                ${screen.contentName || 'Contenido Activo'}
+                            </div>` :
+                            '<div style="color:#666; font-style:italic; display:flex; align-items:center; gap:6px;">' +
+                            '<span class="material-icons" style="font-size:16px; opacity:0.5;">pause_circle</span>' +
+                            'Sin contenido</div>';
+                        if (statusDiv && statusDiv.innerHTML !== statusHtml) statusDiv.innerHTML = statusHtml;
+                    }
+                });
                 return;
             }
 
-            try {
-                const currentVersion = await window.electron.getAppVersion();
-                const url = `${agentServerUrl}/api/agent/check-version?current=${currentVersion}`;
-                console.log('[VERSION CHECK] Fetching:', url);
+            screensCount.textContent = screens.length;
 
-                const response = await fetch(url);
-                const data = await response.json();
+            screensList.innerHTML = screens.map(screen => `
+                <div class="screen-card ${screen.hasContent ? 'active' : 'empty'}" data-id="${screen.id}">
+                    <div class="screen-header">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span class="screen-badge">Pantalla ${screen.id}</span>
+                            <!-- Timer/Refresh Display -->
+                            <div title="Intervalo de recarga" style="display: flex; align-items: center; gap: 6px; background: rgba(255,102,0,0.1); padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(255,102,0,0.3);">
+                                <span class="material-icons" style="font-size: 14px; color: #ff6600;">schedule</span>
+                                <input type="number" class="refresh-input" value="${screen.refreshInterval || 0}" min="0" max="1440" 
+                                    style="width: 35px; background: transparent; border: none; color: #fff; font-size: 12px; font-weight: 700; outline: none; text-align: center;">
+                                <span style="font-size: 10px; color: #888; font-weight: 700;">MIN</span>
+                            </div>
+                        </div>
+                        <span style="font-size:11px; color:#666;">${screen.width}×${screen.height}</span>
+                    </div>
 
-                console.log('[VERSION CHECK] Response:', data);
-                updateAvailable = data.updateAvailable;
-
-                if (updateAvailable) {
-                    updateBtnText.innerHTML = '<span class="material-icons">system_update_alt</span><span>Actualizar App</span>';
-                    updateBtn.classList.remove('btn-secondary');
-                    updateBtn.classList.add('btn-success');
-                    updateBtn.disabled = false;
-                } else {
-                    updateBtnText.innerHTML = '<span class="material-icons">check_circle</span><span>App Actualizada</span>';
-                    updateBtn.classList.remove('btn-success');
-                    updateBtn.classList.add('btn-secondary');
-                    updateBtn.disabled = true;
+                    <div class="screen-current-status" style="margin:10px 0; font-size:13px;">
+                        ${screen.hasContent ?
+                    `<div style="color:var(--color-success); display:flex; align-items:center; gap:6px; font-weight:600;">
+                                <span class="material-icons" style="font-size:18px;">play_circle</span>
+                                ${screen.contentName || 'Contenido Activo'}
+                             </div>` :
+                    `<div style="color:#666; font-style:italic; display:flex; align-items:center; gap:6px;">
+                                <span class="material-icons" style="font-size:18px; opacity:0.5;">pause_circle</span>
+                                Sin contenido
+                             </div>`
                 }
-            } catch (error) {
-                console.error('[VERSION CHECK] Error:', error);
-                updateBtnText.innerHTML = '<span class="material-icons">system_update_alt</span><span>Buscar Actualización</span>';
-                updateBtn.disabled = false;
+                    </div>
+
+                    <div style="display:flex; flex-direction:column; gap:8px;">
+                        <select class="form-control preset-select" data-screen-id="${screen.id}">
+                            ${presetsHtml || '<option value="">Cargando...</option>'}
+                        </select>
+
+
+
+                        <!-- Credentials block (Luckia-specific or general) -->
+                        <div class="credentials-inline hidden" id="creds-${screen.id}">
+                            <input type="text" class="form-control small-input user-input" placeholder="Usuario" id="user-${screen.id}">
+                            <input type="password" class="form-control small-input pass-input" placeholder="Contraseña" id="pass-${screen.id}">
+                        </div>
+
+                        <div style="display:flex; justify-content:flex-end; gap:5px;">
+                            <button class="btn-mini primary" onclick="sendUrl('${screen.id}')">
+                                <span class="material-icons" style="font-size:14px;">send</span> Enviar
+                            </button>
+                            ${screen.hasContent ? `
+                                <button class="btn-mini secondary" onclick="refreshScreen('${screen.id}')" title="Recargar">
+                                    <span class="material-icons" style="font-size:14px;">refresh</span>
+                                </button>
+                                <button class="btn-mini danger" onclick="closeScreen('${screen.id}')" title="Cerrar">
+                                    <span class="material-icons" style="font-size:14px;">close</span>
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        /**
+         * ACTIONS
+         */
+        async function sendUrl(screenId) {
+            const card = document.querySelector(`.screen-card[data-id="${screenId}"]`);
+            const select = card.querySelector('.preset-select');
+            const refreshInput = card.querySelector('.refresh-input');
+            const url = select.value;
+            const interval = parseInt(refreshInput.value) || 0;
+
+            if (!url) return showNotification('Selecciona contenido', 'warning');
+
+            let credentials = null;
+            const contentName = select.options[select.selectedIndex].text;
+
+            // Luckia-specific credentials handling
+            if (contentName.toLowerCase().includes('luckia')) {
+                const user = document.getElementById(`user-${screenId}`).value.trim();
+                const pass = document.getElementById(`pass-${screenId}`).value.trim();
+                if (user && pass) {
+                    credentials = { username: user, password: pass };
+                    await window.electron.saveCredential('luckia_user', user);
+                    await window.electron.saveCredential('luckia_pass', pass);
+                } else {
+                    return showNotification('Luckia requiere credenciales', 'warning');
+                }
+            }
+
+            window.electron.sendUrlToScreen(screenId, url, {
+                contentName,
+                refreshInterval: interval,
+                credentials
+            });
+            showNotification(`Enviando a Pantalla ${screenId}...`, 'success');
+            setTimeout(loadScreens, 500);
+        }
+
+
+        function refreshScreen(screenId) {
+            window.electron.refreshScreen(screenId);
+            showNotification(`Pantalla ${screenId} recargada`, 'success');
+        }
+
+        async function closeScreen(screenId) {
+            if (await showModal('Cerrar Contenido', `¿Cerrar pantalla ${screenId}?`, 'Cerrar', true)) {
+                window.electron.closeScreen(screenId);
+                setTimeout(loadScreens, 300);
             }
         }
 
-        // Verificar periódicamente cada 2 minutos
-        setInterval(() => {
-            if (agentServerUrl) {
-                checkVersionStatus();
-            }
-        }, 2 * 60 * 1000);
+        /**
+         * INITIALIZATION & POLLING
+         */
+        async function loadPresets() {
+            try {
+                const presets = await window.electron.getPresets();
+                if (!presets) return;
 
+                const grouped = presets.reduce((acc, p) => {
+                    if (!acc[p.category]) acc[p.category] = [];
+                    acc[p.category].push(p);
+                    return acc;
+                }, {});
 
-        updateBtn.addEventListener('click', () => {
-            if (!updateAvailable) return;
-
-            // Mostrar spinner y deshabilitar botón
-            updateBtnText.style.display = 'none';
-            updateSpinner.style.display = 'inline-block';
-            updateBtn.disabled = true;
-
-            // Enviar comando
-            window.electron.sendAction('check-update');
-
-            // 10 segundos countdown
-            let countdown = 10;
-            const countdownInterval = setInterval(() => {
-                countdown--;
-                if (countdown > 0) {
-                    updateSpinner.style.display = 'none';
-                    updateBtnText.style.display = 'flex';
-                    updateBtnText.innerHTML = `<span class="material-icons">timer</span><span>Espera ${countdown}s</span>`;
-                } else {
-                    clearInterval(countdownInterval);
-                    checkVersionStatus(); // Re-verificar después del countdown
-                    updateBtnText.style.display = 'flex';
-                    updateSpinner.style.display = 'none';
+                let html = '<option value="">Seleccionar contenido...</option>';
+                for (const [cat, items] of Object.entries(grouped)) {
+                    html += `<optgroup label="${cat}">`;
+                    items.forEach(i => html += `<option value="${i.url}">${i.name}</option>`);
+                    html += `</optgroup>`;
                 }
-            }, 1000);
-        });
+                presetsHtml = html;
 
-        // Escuchar eventos de actualización
-        window.electron.onUpdateStatus((status) => {
-            const notification = document.getElementById('notification');
+                // Refresh any existing selects that are currently showing "Cargando..."
+                document.querySelectorAll('.preset-select').forEach(sel => {
+                    if (!sel.value) sel.innerHTML = html;
+                });
+            } catch (e) { console.error('Presets failed', e); }
+        }
 
-            // Configurar notificación según el estado
-            if (status.type === 'up-to-date') {
-                notification.textContent = 'App en la última versión';
-                notification.className = 'notification success show';
-            } else if (status.type === 'downloading') {
-                notification.textContent = `Descargando actualización...`;
-                notification.className = 'notification info show';
-            } else if (status.type === 'downloaded') {
-                notification.textContent = 'Actualización descargada. Reiniciando...';
-                notification.className = 'notification success show';
-            } else if (status.type === 'error') {
-                notification.textContent = 'Error al buscar actualización';
-                notification.className = 'notification error show';
+        // Delegate Luckia toggle logic to the list container
+        screensList.addEventListener('change', async (e) => {
+            if (e.target.classList.contains('preset-select')) {
+                const screenId = e.target.dataset.screenId;
+                const text = e.target.options[e.target.selectedIndex].text;
+                const credsDiv = document.getElementById(`creds-${screenId}`);
+
+                if (text.toLowerCase().includes('luckia')) {
+                    credsDiv.classList.remove('hidden');
+                    const user = await window.electron.getCredential('luckia_user');
+                    const pass = await window.electron.getCredential('luckia_pass');
+                    if (user) document.getElementById(`user-${screenId}`).value = user;
+                    if (pass) document.getElementById(`pass-${screenId}`).value = pass;
+                } else {
+                    credsDiv.classList.add('hidden');
+                }
             }
+        });
 
-            // Re-habilitar botón inmediatamente cuando hay respuesta
-            updateBtnText.style.display = 'flex';
-            updateBtnText.style.alignItems = 'center';
-            updateBtnText.style.gap = '8px';
-            updateSpinner.style.display = 'none';
-            updateBtn.disabled = false;
+        async function updateGpuStatus() {
+            try {
+                const status = await window.electron.getGpuStatus();
+                document.getElementById('gpu-name').textContent = status.gpuName;
+                const b = document.getElementById('gpu-badge');
+                if (status.isOptimal) {
+                    b.className = 'gpu-badge optimal';
+                    document.getElementById('gpu-icon').textContent = 'check_circle';
+                } else {
+                    b.className = 'gpu-badge warning';
+                    document.getElementById('gpu-icon').textContent = 'warning';
+                }
+            } catch (err) { }
+        }
 
-            // Re-verificar estado de versión después de eventos importantes
-            if (status.type === 'up-to-date' || status.type === 'downloaded') {
-                setTimeout(() => checkVersionStatus(), 2000);
+        document.getElementById('btn-minimize').addEventListener('click', () => window.electron.minimizeWindow());
+        document.getElementById('btn-window-close').addEventListener('click', () => window.electron.closeWindow());
+        document.getElementById('btn-restart').addEventListener('click', async () => {
+            if (await showModal('Reiniciar App', '¿Reiniciar Screens?', 'Reiniciar')) window.electron.sendAction('restart');
+        });
+        document.getElementById('btn-quit').addEventListener('click', async () => {
+            if (await showModal('Cerrar App', '¿Cerrar Screens?', 'Cerrar', true)) window.electron.sendAction('quit');
+        });
+        document.getElementById('btn-logs').addEventListener('click', () => window.electron.sendAction('open-logs'));
+        document.getElementById('btn-update').addEventListener('click', () => {
+            showNotification('Buscando actualizaciones...', 'info');
+            window.electron.sendAction('update');
+        });
+
+        window.electron.getAppVersion().then(v => document.getElementById('agent-version').textContent = 'v' + v);
+
+        async function checkSetup() {
+            const settings = await window.electron.getSettings();
+            if (!settings || !settings.stationName) {
+                showSetupModal(true);
+            } else {
+                document.getElementById('station-name-display').textContent = settings.stationName;
             }
+        }
 
-            // Ocultar notificación después de 6 segundos
-            setTimeout(() => {
-                notification.classList.remove('show');
-            }, 6000);
+        function showSetupModal(isFirstRun = false) {
+            const modal = document.getElementById('setup-modal');
+            const title = document.getElementById('setup-modal-title');
+            const btn = document.getElementById('btn-save-setup');
+            const cancelBtn = document.getElementById('btn-cancel-setup');
+            const input = document.getElementById('setup-station-name');
+
+            if (isFirstRun) {
+                title.textContent = 'Configuración Inicial';
+                btn.textContent = 'Completar Instalación';
+                cancelBtn.classList.add('hidden');
+            } else {
+                title.textContent = 'Nombre del salon';
+                btn.textContent = 'Guardar Cambios';
+                cancelBtn.classList.remove('hidden');
+                input.value = document.getElementById('station-name-display').textContent;
+            }
+            modal.classList.add('show');
+            input.focus();
+        }
+
+        async function saveSetup() {
+            const name = document.getElementById('setup-station-name').value.trim();
+            if (!name) return showNotification('El nombre es obligatorio', 'warning');
+
+            const settings = await window.electron.getSettings();
+            settings.stationName = name;
+
+            const ok = await window.electron.saveSettings(settings);
+            if (ok) {
+                document.getElementById('station-name-display').textContent = name;
+                document.getElementById('setup-modal').classList.remove('show');
+                showNotification('Configuración guardada', 'success');
+            }
+        }
+
+        document.getElementById('btn-save-setup').addEventListener('click', saveSetup);
+        document.getElementById('btn-cancel-setup').addEventListener('click', () => {
+            document.getElementById('setup-modal').classList.remove('show');
+        });
+        document.getElementById('setup-station-name').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') saveSetup();
         });
 
-        // Event listeners para controles de ventana personalizados
-        document.getElementById('btn-minimize').addEventListener('click', () => {
-            window.electron.minimizeWindow();
-        });
+        document.getElementById('station-name-display').addEventListener('click', () => showSetupModal(false));
 
-        document.getElementById('btn-window-close').addEventListener('click', () => {
-            window.electron.closeWindow();
-        });
+        checkSetup();
+        loadPresets().then(loadScreens);
+        updateGpuStatus();
+        setInterval(updateGpuStatus, 30000);
+        setInterval(loadScreens, 2000);
     </script>
 </body>
 
