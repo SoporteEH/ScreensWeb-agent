@@ -4,6 +4,9 @@ contextBridge.exposeInMainWorld('electron', {
     // Device identification (Signage mode)
     onDeviceId: (callback) => ipcRenderer.on('device-id', (event, ...args) => callback(...args)),
 
+    // Display settings
+    openDisplaySettings: () => ipcRenderer.send('open-display-settings'),
+
     // Agent status and versioning
     onAgentInfo: (callback) => ipcRenderer.on('agent-info', (event, ...args) => callback(...args)),
     onUpdateStatus: (callback) => ipcRenderer.on('update-status', (event, ...args) => callback(...args)),

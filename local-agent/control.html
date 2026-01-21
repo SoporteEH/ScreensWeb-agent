@@ -416,6 +416,20 @@
             background: #4b5563;
         }
 
+        .btn-mini.info {
+            background: #3b82f6;
+        }
+
+        .btn-mini.info:hover {
+            background: #2563eb;
+        }
+
+        .panel-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
         .gpu-badge {
             position: relative;
             display: flex;
@@ -640,6 +654,20 @@
         input[type=number] {
             appearance: textfield;
         }
+
+        .screen-resolution-btn {
+            font-size: 14px; 
+            color: #686767;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-bottom: 1px dotted transparent;
+        }
+
+        .screen-resolution-btn:hover {
+            color: var(--color-primary);
+        }
+
+
     </style>
 </head>
 
@@ -662,7 +690,7 @@
             <span class="title-bar-version" id="agent-version"></span>
         </div>
 
-        <span id="station-name-display" class="station-tag" title="Click para cambiar nombre">Local</span>
+        <span id="station-name-display" class="station-tag" title="Nombre del salon">Salon</span>
 
         <div class="title-bar-controls">
             <div class="title-bar-button" id="btn-minimize">
@@ -681,7 +709,12 @@
                     <span class="material-icons">desktop_windows</span>
                     Pantallas Conectadas
                 </div>
-                <span class="screens-count" id="screens-count">0</span>
+                <div class="panel-header-actions">
+                    <button class="btn-mini secondary" onclick="identifyAllScreens()" title="Identificar todas las pantallas">
+                        <span class="material-icons" style="font-size: 14px;">visibility</span>
+                    </button>
+                    <span class="screens-count" id="screens-count">0</span>
+                </div>
             </div>
             <div class="screens-list" id="screens-list"></div>
         </div>
@@ -805,6 +838,8 @@
         }
 
         function renderScreensList() {
+            if (screensCount) screensCount.textContent = screens.length;
+
             const container = document.getElementById('screens-list');
             const currentIds = screens.map(s => s.id).join(',');
             const lastIds = container.dataset.screenIds || '';
@@ -822,7 +857,6 @@
                 if (!card) return;
 
                 // PROTECTION: Skip surgical updates for this card if the user is interacting with it
-                // This prevents the browser from closing dropdowns or resetting input states during a poll
                 const activeEl = document.activeElement;
                 if (activeEl && card.contains(activeEl) && (activeEl.tagName === 'SELECT' || activeEl.tagName === 'INPUT')) {
                     return;
@@ -839,21 +873,37 @@
                     statusDiv.innerHTML = statusHtml;
                 }
 
-                // Update action buttons (show/hide refresh and close)
+                // Update action buttons (Injecting the full HTML to include the new Identify button)
                 const actionsDiv = card.querySelector('.screen-actions-container');
-                const actionsHtml = renderActionsHtml(screen);
-                if (actionsDiv.innerHTML !== actionsHtml) {
+                // Reconstruimos el HTML de los botones para asegurar que el estado (close/refresh) es correcto
+                const actionsHtml = `
+                    <button class="btn-mini secondary" onclick="window.electron.identifyScreen('${screen.id}')" title="Identificar esta pantalla">
+                        <span class="material-icons" style="font-size:14px;">visibility</span>
+                    </button>
+                    <button class="btn-mini primary" onclick="sendUrl('${screen.id}', this)">
+                        <span class="material-icons" style="font-size:14px;">send</span> Enviar
+                    </button>
+                    ${screen.hasContent ? `
+                        <button class="btn-mini secondary" onclick="refreshScreen('${screen.id}')" title="Recargar">
+                            <span class="material-icons" style="font-size:14px;">refresh</span>
+                        </button>
+                        <button class="btn-mini danger" onclick="closeScreen('${screen.id}')" title="Cerrar">
+                            <span class="material-icons" style="font-size:14px;">close</span>
+                        </button>
+                    ` : ''}
+                `;
+        
+                if (actionsDiv.innerHTML.trim() !== actionsHtml.trim()) {
                     actionsDiv.innerHTML = actionsHtml;
                 }
 
-                // RE-HYDRATION: If presets were previously "Cargando..." but we have them now, update the select
+                // RE-HYDRATION: If presets were previously "Cargando..."
                 const select = card.querySelector('.preset-select');
                 if (select && presetsHtml && select.options.length <= 1) {
                     select.innerHTML = presetsHtml;
                 }
             });
         }
-
         function renderScreenCard(screen) {
             return `
                 <div class="screen-card ${screen.hasContent ? 'active' : 'empty'}" data-id="${screen.id}">
@@ -871,25 +921,47 @@
                                 <span style="font-size: 10px; color: #888; font-weight: 700;">MIN</span>
                             </div>
                         </div>
-                        <span style="font-size:11px; color:#666;">${screen.width}x${screen.height}</span>
+                        <span class="screen-resolution-btn" 
+                            onclick="window.electron.openDisplaySettings()" 
+                            title="Abrir Configuración de Pantalla de Windows">
+                            ${screen.width}x${screen.height}
+                            <span class="material-icons" style="font-size: 10px; vertical-align: middle;">open_in_new</span>
+                        </span>
                     </div>
-
+                
                     <div class="screen-current-status" style="margin:10px 0; font-size:13px;">
                         ${renderStatusHtml(screen)}
                     </div>
-
+                
                     <div style="display:flex; flex-direction:column; gap:8px;">
                         <select class="form-control preset-select" data-screen-id="${screen.id}">
                             ${presetsHtml || '<option value="">Cargando...</option>'}
                         </select>
-
+                    
                         <div class="credentials-inline hidden" id="creds-${screen.id}">
                             <input type="text" class="form-control small-input user-input" placeholder="Usuario" id="user-${screen.id}">
                             <input type="password" class="form-control small-input pass-input" placeholder="Contraseña" id="pass-${screen.id}">
                         </div>
-
+                    
+                        <!-- BOTONERA -->
                         <div class="screen-actions-container" style="display:flex; justify-content:flex-end; gap:5px;">
-                            ${renderActionsHtml(screen)}
+                            <!-- Botón Identificar Individual -->
+                            <button class="btn-mini secondary" onclick="window.electron.identifyScreen('${screen.id}')" title="Identificar esta pantalla">
+                                <span class="material-icons" style="font-size:14px;">visibility</span>
+                            </button>
+                        
+                            <button class="btn-mini primary" onclick="sendUrl('${screen.id}', this)">
+                                <span class="material-icons" style="font-size:14px;">send</span> Enviar
+                            </button>
+
+                            ${screen.hasContent ? `
+                                <button class="btn-mini secondary" onclick="refreshScreen('${screen.id}')" title="Recargar">
+                                    <span class="material-icons" style="font-size:14px;">refresh</span>
+                                </button>
+                                <button class="btn-mini danger" onclick="closeScreen('${screen.id}')" title="Cerrar">
+                                    <span class="material-icons" style="font-size:14px;">close</span>
+                                </button>
+                            ` : ''}
                         </div>
                     </div>
                 </div>
@@ -922,6 +994,12 @@
                     </button>
                 ` : ''}
             `;
+        }
+
+        function identifyAllScreens() {
+            if (screens.length === 0) return;
+            screens.forEach(s => window.electron.identifyScreen(s.id));
+            showNotification('Identificando todas las pantallas...', 'info');
         }
 
         /**

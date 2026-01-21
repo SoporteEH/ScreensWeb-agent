@@ -93,6 +93,10 @@ ipcMain.on('agent-action', (event, { action }) => {
     }
 });
 
+ipcMain.on('open-display-settings', () => {
+    require('child_process').exec('start ms-settings:display');
+});
+
 ipcMain.handle('get-app-version', () => AGENT_VERSION);
 ipcMain.handle('get-gpu-status', (event, options) => getGpuStatus(options));
 
@@ -310,6 +314,7 @@ app.whenReady().then(async () => {
 
     screen.on('display-added', onScreenChange);
     screen.on('display-removed', onScreenChange);
+    screen.on('display-metrics-changed', onScreenChange);
 
     log.info('[INIT]: Arranque completado.');
 });
