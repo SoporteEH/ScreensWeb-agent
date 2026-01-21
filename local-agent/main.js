@@ -1,7 +1,7 @@
 const { app, BrowserWindow, screen, ipcMain, shell, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { ElectronBlocker } = require('@cliqz/adblocker-electron');
+const { ElectronBlocker, parseFilters } = require('@cliqz/adblocker-electron');
 const fetch = require('cross-fetch');
 const { log } = require('./utils/logConfig');
 
@@ -221,6 +221,12 @@ function onScreenChange() {
     screenChangeTimeout = setTimeout(async () => {
         log.info('[DISPLAY]: Cambio detectado, re-mapeando pantallas...');
         await buildDisplayMap(hardwareIdToDisplayMap);
+
+        // Notify control panel to perform a structural refresh
+        const controlWindow = require('./services/tray').getControlWindow?.();
+        if (controlWindow && !controlWindow.isDestroyed()) {
+            controlWindow.webContents.send('screens-changed');
+        }
     }, CONSTANTS.SCREEN_DEBOUNCE_MS);
 }
 
@@ -249,32 +255,59 @@ if (app.isPackaged) {
 app.whenReady().then(async () => {
     log.info('[INIT]: Screens Standalone Ready.');
 
-    // Critical Performance Optimizations for low-RAM devices
-    try {
-        await session.defaultSession.clearCache();
-        log.info('[MEMORY]: Cache HTTP de inicio limpiada.');
-
-        const blocker = await ElectronBlocker.fromPrebuiltAdsAndTracking(fetch);
-        blocker.enableBlockingInSession(session.defaultSession);
-        log.info('[ADBLOCK]: Filtros de publicidad y trackers activados.');
-    } catch (err) {
-        log.error('[INIT]: Error aplicando optimizaciones iniciales:', err);
-    }
-
-    // Services Initialization
+    // Phase 1: Immediate UI Availability
     createTray(AGENT_VERSION);
     await buildDisplayMap(hardwareIdToDisplayMap);
 
-    // Start Network Monitoring
+    // Phase 2: Background Optimizations (Staggered to prevent UI hang)
+    setTimeout(async () => {
+        try {
+            // 1. Initial Cache Clear
+            await session.defaultSession.clearCache();
+            log.info('[MEMORY]: Cache HTTP de inicio limpiada.');
+
+            // 2. Optimized Adblocker Load
+            let blocker;
+            const { ADBLOCK_CACHE_PATH } = require('./config/constants');
+
+            if (fs.existsSync(ADBLOCK_CACHE_PATH)) {
+                log.info('[ADBLOCK]: Cargando motor desde cache...');
+                const buffer = fs.readFileSync(ADBLOCK_CACHE_PATH);
+                blocker = ElectronBlocker.deserialize(buffer);
+            } else {
+                log.info('[ADBLOCK]: Inicializando nuevo motor (primera vez)...');
+                blocker = await ElectronBlocker.fromPrebuiltAdsAndTracking(fetch);
+
+                // Add whitelist before caching
+                const { networkFilters, cosmeticFilters, preprocessors } = parseFilters('@@||bannerflow.net^');
+                blocker.update({
+                    newNetworkFilters: networkFilters,
+                    newCosmeticFilters: cosmeticFilters,
+                    newPreprocessors: preprocessors
+                });
+
+                // Save to cache for next boot
+                const buffer = blocker.serialize();
+                fs.writeFileSync(ADBLOCK_CACHE_PATH, buffer);
+                log.info('[ADBLOCK]: Motor serializado y guardado en cache.');
+            }
+
+            blocker.enableBlockingInSession(session.defaultSession);
+            log.info('[ADBLOCK]: Filtros de publicidad activados.');
+
+        } catch (err) {
+            log.error('[INIT]: Error en optimizaciones de fondo:', err);
+        }
+    }, 100);
+
+    // Phase 3: Secondary Services
     networkMonitor.start(5000);
-
     restoreLastState(hardwareIdToDisplayMap, handleShowUrl);
-
-    // Delayed control panel opening to ensure all windows are mapped
-    setTimeout(() => openControlWindow(AGENT_VERSION), 1000);
 
     screen.on('display-added', onScreenChange);
     screen.on('display-removed', onScreenChange);
+
+    log.info('[INIT]: Arranque completado.');
 });
 
 /**

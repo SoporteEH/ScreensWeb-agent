@@ -10,6 +10,7 @@ const STATE_FILE_PATH = path.join(CONFIG_DIR, 'state.json');
 const CREDENTIALS_FILE_PATH = path.join(CONFIG_DIR, 'secrets.json');
 const SETTINGS_FILE_PATH = path.join(CONFIG_DIR, 'settings.json');
 const CONTENT_DIR = path.join(CONFIG_DIR, 'content');
+const ADBLOCK_CACHE_PATH = path.join(CONFIG_DIR, 'adblocker.bin');
 
 /**
  * APP THRESHOLDS & INTERVALS
@@ -30,5 +31,6 @@ module.exports = {
     CONSTANTS,
     CREDENTIALS_FILE_PATH,
     SETTINGS_FILE_PATH,
+    ADBLOCK_CACHE_PATH,
     AGENT_VERSION
 };

@@ -72,6 +72,7 @@ function openControlWindow(version) {
         resizable: false,
         alwaysOnTop: true,
         backgroundColor: '#1a1a1a',
+        show: false,
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -79,7 +80,24 @@ function openControlWindow(version) {
         }
     });
 
+    // Refresh UI on restore/focus to ensure state is current
+    controlWindow.on('restore', () => {
+        controlWindow.webContents.send('screens-changed');
+    });
+
+    controlWindow.on('focus', () => {
+        controlWindow.webContents.send('screens-changed');
+    });
+
+    controlWindow.on('show', () => {
+        controlWindow.webContents.send('screens-changed');
+    });
+
     controlWindow.loadFile(path.join(__dirname, '..', 'control.html'));
+
+    controlWindow.once('ready-to-show', () => {
+        controlWindow.show();
+    });
 
     controlWindow.webContents.on('did-finish-load', () => {
         controlWindow.webContents.send('agent-info', {
@@ -117,4 +135,11 @@ function openControlWindow(version) {
     });
 }
 
-module.exports = { createTray, openControlWindow };
+/**
+ * Helper to retrieve the active control window instance.
+ */
+function getControlWindow() {
+    return controlWindow;
+}
+
+module.exports = { createTray, openControlWindow, getControlWindow };

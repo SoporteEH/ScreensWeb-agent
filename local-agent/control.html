@@ -27,6 +27,105 @@
             --color-success-bg: rgba(34, 197, 94, 0.1);
         }
 
+        /* Boot Overlay styles */
+        .boot-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--color-bg);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.5s ease-out, visibility 0.5s;
+        }
+
+        .boot-overlay.hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        .boot-logo {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            box-shadow: 0 0 30px rgba(207, 103, 22, 0.4);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                box-shadow: 0 0 20px rgba(207, 103, 22, 0.3);
+            }
+
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 0 40px rgba(207, 103, 22, 0.6);
+            }
+
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 20px rgba(207, 103, 22, 0.3);
+            }
+        }
+
+        .boot-text {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--color-text);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .boot-subtext {
+            font-size: 11px;
+            color: var(--color-text-dim);
+            margin-top: 8px;
+        }
+
+        .boot-spinner {
+            width: 40px;
+            height: 4px;
+            background: var(--color-surface-brighter);
+            border-radius: 2px;
+            margin-top: 20px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .boot-spinner::after {
+            content: '';
+            position: absolute;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: var(--color-primary);
+            animation: loading 1.5s infinite ease-in-out;
+        }
+
+        @keyframes loading {
+            0% {
+                left: -100%;
+            }
+
+            50% {
+                left: 0;
+            }
+
+            100% {
+                left: 100%;
+            }
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -508,6 +607,15 @@
 </head>
 
 <body>
+    <div id="boot-overlay" class="boot-overlay">
+        <div class="boot-logo">
+            <span class="material-icons" style="font-size: 32px; color: white;">monitor</span>
+        </div>
+        <div class="boot-text">Iniciando Screens</div>
+        <div class="boot-subtext" id="boot-status">Sincronizando sistemas...</div>
+        <div class="boot-spinner"></div>
+    </div>
+
     <div class="title-bar">
         <div class="title-bar-left">
             <div class="title-bar-logo">
@@ -655,38 +763,61 @@
         }
 
         function renderScreensList() {
-            const isEditing = document.activeElement &&
-                (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT') &&
-                screensList.contains(document.activeElement);
+            const container = document.getElementById('screens-list');
+            const currentIds = screens.map(s => s.id).join(',');
+            const lastIds = container.dataset.screenIds || '';
 
-            if (isEditing) {
-                // Background update of status only
-                screens.forEach(screen => {
-                    const card = document.querySelector(`.screen-card[data-id="${screen.id}"]`);
-                    if (card) {
-                        const statusDiv = card.querySelector('.screen-current-status');
-                        const statusHtml = screen.hasContent ?
-                            `<div style="color:var(--color-success); display:flex; align-items:center; gap:5px; font-weight:600;">
-                                <span class="material-icons" style="font-size:16px;">play_circle</span>
-                                ${screen.contentName || 'Contenido Activo'}
-                            </div>` :
-                            '<div style="color:#666; font-style:italic; display:flex; align-items:center; gap:6px;">' +
-                            '<span class="material-icons" style="font-size:16px; opacity:0.5;">pause_circle</span>' +
-                            'Sin contenido</div>';
-                        if (statusDiv && statusDiv.innerHTML !== statusHtml) statusDiv.innerHTML = statusHtml;
-                    }
-                });
+            // STRUCTURAL REFRESH: Only redraw everything if the monitors changed
+            if (currentIds !== lastIds) {
+                container.dataset.screenIds = currentIds;
+                container.innerHTML = screens.map(renderScreenCard).join('');
                 return;
             }
 
-            screensCount.textContent = screens.length;
+            // SURGICAL REFRESH: Update only classes and status text
+            screens.forEach(screen => {
+                const card = container.querySelector(`.screen-card[data-id="${screen.id}"]`);
+                if (!card) return;
 
-            screensList.innerHTML = screens.map(screen => `
+                // PROTECTION: Skip surgical updates for this card if the user is interacting with it
+                // This prevents the browser from closing dropdowns or resetting input states during a poll
+                const activeEl = document.activeElement;
+                if (activeEl && card.contains(activeEl) && (activeEl.tagName === 'SELECT' || activeEl.tagName === 'INPUT')) {
+                    return;
+                }
+
+                // Update active state class
+                card.classList.toggle('active', screen.hasContent);
+                card.classList.toggle('empty', !screen.hasContent);
+
+                // Update status display
+                const statusDiv = card.querySelector('.screen-current-status');
+                const statusHtml = renderStatusHtml(screen);
+                if (statusDiv.innerHTML !== statusHtml) {
+                    statusDiv.innerHTML = statusHtml;
+                }
+
+                // Update action buttons (show/hide refresh and close)
+                const actionsDiv = card.querySelector('.screen-actions-container');
+                const actionsHtml = renderActionsHtml(screen);
+                if (actionsDiv.innerHTML !== actionsHtml) {
+                    actionsDiv.innerHTML = actionsHtml;
+                }
+
+                // RE-HYDRATION: If presets were previously "Cargando..." but we have them now, update the select
+                const select = card.querySelector('.preset-select');
+                if (select && presetsHtml && select.options.length <= 1) {
+                    select.innerHTML = presetsHtml;
+                }
+            });
+        }
+
+        function renderScreenCard(screen) {
+            return `
                 <div class="screen-card ${screen.hasContent ? 'active' : 'empty'}" data-id="${screen.id}">
                     <div class="screen-header">
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <span class="screen-badge">Pantalla ${screen.id}</span>
-                            <!-- Timer/Refresh Display -->
                             <div title="Intervalo de recarga" style="display: flex; align-items: center; gap: 6px; background: rgba(255,102,0,0.1); padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(255,102,0,0.3);">
                                 <span class="material-icons" style="font-size: 14px; color: #ff6600;">schedule</span>
                                 <input type="number" class="refresh-input" value="${screen.refreshInterval || 0}" min="0" max="1440" 
@@ -698,16 +829,7 @@
                     </div>
 
                     <div class="screen-current-status" style="margin:10px 0; font-size:13px;">
-                        ${screen.hasContent ?
-                    `<div style="color:var(--color-success); display:flex; align-items:center; gap:6px; font-weight:600;">
-                                <span class="material-icons" style="font-size:18px;">play_circle</span>
-                                ${screen.contentName || 'Contenido Activo'}
-                             </div>` :
-                    `<div style="color:#666; font-style:italic; display:flex; align-items:center; gap:6px;">
-                                <span class="material-icons" style="font-size:18px; opacity:0.5;">pause_circle</span>
-                                Sin contenido
-                             </div>`
-                }
+                        ${renderStatusHtml(screen)}
                     </div>
 
                     <div style="display:flex; flex-direction:column; gap:8px;">
@@ -715,36 +837,58 @@
                             ${presetsHtml || '<option value="">Cargando...</option>'}
                         </select>
 
-
-
-                        <!-- Credentials block (Luckia-specific or general) -->
                         <div class="credentials-inline hidden" id="creds-${screen.id}">
                             <input type="text" class="form-control small-input user-input" placeholder="Usuario" id="user-${screen.id}">
                             <input type="password" class="form-control small-input pass-input" placeholder="Contraseña" id="pass-${screen.id}">
                         </div>
 
-                        <div style="display:flex; justify-content:flex-end; gap:5px;">
-                            <button class="btn-mini primary" onclick="sendUrl('${screen.id}')">
-                                <span class="material-icons" style="font-size:14px;">send</span> Enviar
-                            </button>
-                            ${screen.hasContent ? `
-                                <button class="btn-mini secondary" onclick="refreshScreen('${screen.id}')" title="Recargar">
-                                    <span class="material-icons" style="font-size:14px;">refresh</span>
-                                </button>
-                                <button class="btn-mini danger" onclick="closeScreen('${screen.id}')" title="Cerrar">
-                                    <span class="material-icons" style="font-size:14px;">close</span>
-                                </button>
-                            ` : ''}
+                        <div class="screen-actions-container" style="display:flex; justify-content:flex-end; gap:5px;">
+                            ${renderActionsHtml(screen)}
                         </div>
                     </div>
                 </div>
-            `).join('');
+            `;
+        }
+
+        function renderStatusHtml(screen) {
+            return screen.hasContent ?
+                `<div style="color:var(--color-success); display:flex; align-items:center; gap:6px; font-weight:600;">
+                    <span class="material-icons" style="font-size:18px;">play_circle</span>
+                    ${screen.contentName || 'Contenido Activo'}
+                 </div>` :
+                `<div style="color:#666; font-style:italic; display:flex; align-items:center; gap:6px;">
+                    <span class="material-icons" style="font-size:18px; opacity:0.5;">pause_circle</span>
+                    Sin contenido
+                 </div>`;
+        }
+
+        function renderActionsHtml(screen) {
+            return `
+                <button class="btn-mini primary" onclick="sendUrl('${screen.id}')">
+                    <span class="material-icons" style="font-size:14px;">send</span> Enviar
+                </button>
+                ${screen.hasContent ? `
+                    <button class="btn-mini secondary" onclick="refreshScreen('${screen.id}')" title="Recargar">
+                        <span class="material-icons" style="font-size:14px;">refresh</span>
+                    </button>
+                    <button class="btn-mini danger" onclick="closeScreen('${screen.id}')" title="Cerrar">
+                        <span class="material-icons" style="font-size:14px;">close</span>
+                    </button>
+                ` : ''}
+            `;
         }
 
         /**
          * ACTIONS
          */
         async function sendUrl(screenId) {
+            const btn = event.currentTarget;
+            if (btn.disabled) return;
+
+            btn.disabled = true;
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<span class="material-icons" style="font-size:14px; animation: spin 1s linear infinite;">autorenew</span>';
+
             const card = document.querySelector(`.screen-card[data-id="${screenId}"]`);
             const select = card.querySelector('.preset-select');
             const refreshInput = card.querySelector('.refresh-input');
@@ -775,7 +919,12 @@
                 credentials
             });
             showNotification(`Enviando a Pantalla ${screenId}...`, 'success');
-            setTimeout(loadScreens, 500);
+
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                loadScreens();
+            }, 800);
         }
 
 
@@ -925,11 +1074,52 @@
 
         document.getElementById('station-name-display').addEventListener('click', () => showSetupModal(false));
 
-        checkSetup();
-        loadPresets().then(loadScreens);
-        updateGpuStatus();
-        setInterval(updateGpuStatus, 30000);
-        setInterval(loadScreens, 2000);
+        window.electron.onScreensChanged(() => {
+            console.log('Hardware change detected, forcing structural refresh');
+            const container = document.getElementById('screens-list');
+            if (container) container.dataset.screenIds = ''; // Clear to force redraw
+            loadScreens();
+        });
+
+        async function initApp() {
+            const bootOverlay = document.getElementById('boot-overlay');
+            const bootStatus = document.getElementById('boot-status');
+
+            try {
+                // Phase 1: Basic App Info & Settings
+                bootStatus.textContent = 'Configurando entorno...';
+                await checkSetup();
+                const version = await window.electron.getAppVersion();
+                document.getElementById('agent-version').textContent = 'v' + version;
+
+                // Phase 2: Presets (Crucial for UI population)
+                bootStatus.textContent = 'Cargando contenidos...';
+                await loadPresets();
+
+                // Phase 3: Hardware & GPU
+                bootStatus.textContent = 'Detectando hardware...';
+                await Promise.all([
+                    loadScreens(),
+                    updateGpuStatus()
+                ]);
+
+                // Phase 4: Finish line
+                bootStatus.textContent = 'Listo';
+                setTimeout(() => {
+                    bootOverlay.classList.add('hidden');
+                }, 500);
+
+                // Start background polling only after initial load success
+                setInterval(updateGpuStatus, 30000);
+                setInterval(loadScreens, 2000);
+            } catch (err) {
+                console.error('Boot error:', err);
+                bootStatus.textContent = 'Error al iniciar. Reintentando...';
+                setTimeout(initApp, 2000);
+            }
+        }
+
+        initApp();
     </script>
 </body>
 
