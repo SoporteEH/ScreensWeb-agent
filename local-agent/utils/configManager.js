@@ -1,7 +1,3 @@
-/**
- * Config Manager
- * Gestiona configuración del agente con electron-store
- */
 const Store = require('electron-store');
 const { log } = require('./logConfig');
 

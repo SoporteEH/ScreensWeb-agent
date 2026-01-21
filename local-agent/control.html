@@ -143,6 +143,7 @@
         }
 
         .title-bar {
+            position: relative;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -189,23 +190,30 @@
         }
 
         .station-tag {
-            font-size: 11px;
-            background: rgba(207, 103, 22, 0.15);
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+    
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+    
+            background: rgba(207, 103, 22, 0.1); 
             color: var(--color-primary);
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-weight: 600;
-            border: 1px solid rgba(207, 103, 22, 0.3);
+            padding: 4px 16px;
+            border-radius: 6px;
+            border: 1px solid rgba(207, 103, 22, 0.2);
             cursor: pointer;
             transition: all 0.2s;
             -webkit-app-region: no-drag;
-            position: relative;
             z-index: 10;
         }
 
         .station-tag:hover {
             background: rgba(207, 103, 22, 0.25);
+            color: var(--color-primary);
             border-color: var(--color-primary);
+            box-shadow: 0 0 10px rgba(207, 103, 22, 0.1);
         }
 
         .title-bar-controls {
@@ -409,14 +417,28 @@
         }
 
         .gpu-badge {
+            position: relative;
             display: flex;
             align-items: center;
             gap: 10px;
             padding: 12px;
+            padding-right: 35px;
             background: #1e1e1e;
             border: 1px solid var(--color-border-hover);
             border-radius: 8px;
             margin-bottom: 15px;
+        }
+
+        .refresh-gpu-btn {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 16px;
+            color: #666;
+            cursor: pointer;
+            transition: color 0.2s, transform 0.5s;
+            padding: 4px;
         }
 
         .gpu-badge.optimal {
@@ -442,6 +464,21 @@
             100% {
                 box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
             }
+        }
+
+        .refresh-gpu-btn:hover {
+            color: #fff;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+        }
+
+        .spin-animate { 
+            animation: spin 1s linear infinite; 
+            color: var(--color-primary) !important; 
+        }
+
+        @keyframes spin { 
+            100% { transform: translateY(-50%) rotate(360deg); }
         }
 
         .notification {
@@ -623,8 +660,10 @@
             </div>
             <span class="title-bar-text">Screens</span>
             <span class="title-bar-version" id="agent-version"></span>
-            <span id="station-name-display" class="station-tag" title="Click para cambiar nombre">Local</span>
         </div>
+
+        <span id="station-name-display" class="station-tag" title="Click para cambiar nombre">Local</span>
+
         <div class="title-bar-controls">
             <div class="title-bar-button" id="btn-minimize">
                 <span class="material-icons">minimize</span>
@@ -653,14 +692,17 @@
                     <div class="gpu-badge" id="gpu-badge">
                         <span class="material-icons gpu-icon" id="gpu-icon">memory</span>
                         <div class="gpu-info-text">
-                            <span class="gpu-label"
-                                style="font-weight:700; font-size:10px; color:#888; display:block;">GPU</span>
-                            <span class="gpu-name" id="gpu-name"
-                                style="color:#fff; font-weight:600; display:block; font-size:11px;">Cargando...</span>
+                            <span class="gpu-name" id="gpu-name" style="color:#fff; font-weight:600; display:block; font-size:11px;">
+                                Cargando...
+                            </span>
                         </div>
+                        <span class="material-icons refresh-gpu-btn" 
+                              onclick="updateGpuStatus(true)" 
+                              title="Volver a escanear hardware">
+                            refresh
+                        </span>
                     </div>
                 </div>
-
                 <div class="agent-actions" style="display: flex; flex-direction: column; gap: 10px;">
                     <button class="btn btn-secondary" id="btn-restart">
                         <span class="material-icons">restart_alt</span>
@@ -820,12 +862,16 @@
                             <span class="screen-badge">Pantalla ${screen.id}</span>
                             <div title="Intervalo de recarga" style="display: flex; align-items: center; gap: 6px; background: rgba(255,102,0,0.1); padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(255,102,0,0.3);">
                                 <span class="material-icons" style="font-size: 14px; color: #ff6600;">schedule</span>
-                                <input type="number" class="refresh-input" value="${screen.refreshInterval || 0}" min="0" max="1440" 
+                                <input type="number" class="refresh-input" 
+                                    value="${screen.refreshInterval || 0}" 
+                                    min="0" max="1440" 
+                                    onfocus="if(this.value=='0')this.value=''" 
+                                    onblur="if(this.value=='')this.value='0'"
                                     style="width: 35px; background: transparent; border: none; color: #fff; font-size: 12px; font-weight: 700; outline: none; text-align: center;">
                                 <span style="font-size: 10px; color: #888; font-weight: 700;">MIN</span>
                             </div>
                         </div>
-                        <span style="font-size:11px; color:#666;">${screen.width}×${screen.height}</span>
+                        <span style="font-size:11px; color:#666;">${screen.width}x${screen.height}</span>
                     </div>
 
                     <div class="screen-current-status" style="margin:10px 0; font-size:13px;">
@@ -988,11 +1034,21 @@
             }
         });
 
-        async function updateGpuStatus() {
+        async function updateGpuStatus(force = false) {
+            const btn = document.querySelector('.refresh-gpu-btn');
+            const nameLabel = document.getElementById('gpu-name');
+    
+            // Feedback visual de carga
+            if (force && btn) btn.classList.add('spin-animate');
+            if (force) nameLabel.style.opacity = '0.5';
+
             try {
-                const status = await window.electron.getGpuStatus();
+                // Pasamos { force: true } si el usuario hizo clic
+                const status = await window.electron.getGpuStatus({ force: force });
+                
                 document.getElementById('gpu-name').textContent = status.gpuName;
                 const b = document.getElementById('gpu-badge');
+        
                 if (status.isOptimal) {
                     b.className = 'gpu-badge optimal';
                     document.getElementById('gpu-icon').textContent = 'check_circle';
@@ -1000,7 +1056,13 @@
                     b.className = 'gpu-badge warning';
                     document.getElementById('gpu-icon').textContent = 'warning';
                 }
-            } catch (err) { }
+            } catch (err) {
+                console.error("GPU Check failed", err);
+            } finally {
+                // Quitar animación
+                if (btn) btn.classList.remove('spin-animate');
+                nameLabel.style.opacity = '1';
+            }
         }
 
         document.getElementById('btn-minimize').addEventListener('click', () => window.electron.minimizeWindow());
@@ -1084,6 +1146,7 @@
         async function initApp() {
             const bootOverlay = document.getElementById('boot-overlay');
             const bootStatus = document.getElementById('boot-status');
+            updateGpuStatus(false);
 
             try {
                 // Phase 1: Basic App Info & Settings
@@ -1110,7 +1173,6 @@
                 }, 500);
 
                 // Start background polling only after initial load success
-                setInterval(updateGpuStatus, 30000);
                 setInterval(loadScreens, 2000);
             } catch (err) {
                 console.error('Boot error:', err);

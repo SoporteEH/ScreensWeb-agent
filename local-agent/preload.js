@@ -1,10 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-/**
- * PRELOAD SCRIPT
- * Exposes a limited and secure set of IPC channels to the renderer process.
- * Maintains context isolation while allowing the Control Panel to communicate with Main.
- */
 contextBridge.exposeInMainWorld('electron', {
     // Device identification (Signage mode)
     onDeviceId: (callback) => ipcRenderer.on('device-id', (event, ...args) => callback(...args)),
@@ -39,7 +34,7 @@ contextBridge.exposeInMainWorld('electron', {
     // Configuration and presets
     getPresets: () => ipcRenderer.invoke('get-presets'),
     browseLocalContent: () => ipcRenderer.invoke('browse-local-content'),
-    getGpuStatus: () => ipcRenderer.invoke('get-gpu-status'),
+    getGpuStatus: (options) => ipcRenderer.invoke('get-gpu-status', options),
 
     // Credential persistence
     getCredential: (key) => ipcRenderer.invoke('get-credential', key),

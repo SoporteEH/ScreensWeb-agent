@@ -2,91 +2,100 @@ const { net } = require('electron');
 const EventEmitter = require('events');
 const path = require('path');
 const { log } = require('../utils/logConfig');
+const { loadLastState } = require('./state');
 
 /**
  * Network Monitor Service
- * Actively checks for internet connectivity and notifies the system
- * to trigger Fallback or Recovery actions.
+ * Chequeo activo (Polling) cada 5s para detectar caídas y recuperaciones.
  */
 class NetworkMonitor extends EventEmitter {
     constructor(context) {
         super();
-        this.context = context;
-        this.isOnline = true;
+        this.context = context; // { managedWindows, retryManager, etc. }
+        this.isOnline = true;   // Asumimos online al arranque
         this.checkInterval = null;
         this.fallbackPath = `file://${path.join(__dirname, '../fallback.html')}`;
     }
 
     /**
-     * Start the polling monitor.
+     * Inicia el monitor
      */
     start(intervalMs = 5000) {
+        // Chequeo inicial
+        this.isOnline = net.isOnline();
+        
         this.checkInterval = setInterval(() => this.check(), intervalMs);
-        log.info(`[NETWORK]: Monitor iniciado (Intervalo: ${intervalMs}ms)`);
+        log.info(`[NETWORK]: Monitor iniciado (Polling: ${intervalMs}ms)`);
     }
 
     /**
-     * Perform a connectivity check and trigger events/actions on change.
+     * Comprueba conectividad y gestiona cambios de estado
      */
     async check() {
         const currentlyOnline = net.isOnline();
 
         if (currentlyOnline !== this.isOnline) {
             this.isOnline = currentlyOnline;
+            
             if (this.isOnline) {
-                log.info('[NETWORK]: Conexion restaurada.');
+                log.info('[NETWORK]: Conexión RECUPERADA (Online). Iniciando recuperación...');
+                this.emit('network-online');
                 await this.handleRecovery();
             } else {
-                log.warn('[NETWORK]: Conexion perdida.');
+                log.warn('[NETWORK]: Conexión PERDIDA (Offline). Activando Fallback...');
+                this.emit('network-offline');
                 await this.handleFallback();
             }
-            this.emit(this.isOnline ? 'network-online' : 'network-offline');
         }
     }
 
     /**
-     * Fallback Logic: Switch remote windows to fallback.html
+     * Pone las pantallas remotas en modo Fallback
      */
     async handleFallback() {
-        log.info('[RESILIENCE]: Aplicando Fallback a contenido remoto...');
+        // Leemos el estado real para saber qué debería haber (no lo que hay ahora)
+        const lastState = loadLastState();
+
         for (const [screenId, win] of this.context.managedWindows.entries()) {
             if (!win || win.isDestroyed()) continue;
 
-            const currentUrl = win.webContents.getURL();
-
-            // STRICT FILTERING: Only fallback if current content is remote (http/https)
-            // or if the window is already in a failed state (showing fallback but intended to be remote)
-            if (currentUrl.startsWith('http')) {
-                log.info(`[RESILIENCE]: Pantalla ${screenId} -> Fallback (Offline)`);
-                win.loadURL(this.fallbackPath);
+            const stateData = lastState[String(screenId)];
+            // Solo aplicar fallback si la intención original era una URL remota
+            if (stateData && stateData.url && stateData.url.startsWith('http')) {
+                const currentUrl = win.webContents.getURL();
+                // Evitar recargar si ya está en fallback
+                if (!currentUrl.includes('fallback.html')) {
+                    log.info(`[RESILIENCE]: Pantalla ${screenId} -> Fallback (Offline)`);
+                    win.loadURL(this.fallbackPath);
+                }
             }
         }
     }
 
     /**
-     * Recovery Logic: Reload original remote URLs once online
+     * Recupera el contenido original
      */
     async handleRecovery() {
-        log.info('[RESILIENCE]: Iniciando recuperacion de pantallas...');
+        const lastState = loadLastState();
 
         for (const [screenId, win] of this.context.managedWindows.entries()) {
             if (!win || win.isDestroyed()) continue;
 
             const currentUrl = win.webContents.getURL();
+            const stateData = lastState[String(screenId)];
 
-            // We only need to recover windows showing the fallback
-            if (currentUrl === this.fallbackPath) {
-                log.info(`[RESILIENCE]: Pantalla ${screenId} -> Recuperando contenido original...`);
-
-                // CRITICAL: Clear any pending retries to avoid collision/flickering
+            // Si está mostrando fallback y debería mostrar algo remoto
+            if (currentUrl.includes('fallback.html') && stateData && stateData.url) {
+                log.info(`[RESILIENCE]: Recuperando Pantalla ${screenId} -> ${stateData.url}`);
+                
+                // Limpiar reintentos pendientes para evitar doble carga
                 if (this.context.retryManager && this.context.retryManager.has(screenId)) {
                     const retry = this.context.retryManager.get(screenId);
                     if (retry.timerId) clearTimeout(retry.timerId);
                     this.context.retryManager.delete(screenId);
                 }
 
-                // Force a reload using the last known state
-                // This will use handleShowUrl which will use the state data
+                // Emitir evento para que main.js ejecute la carga
                 this.emit('recover-screen', screenId);
             }
         }

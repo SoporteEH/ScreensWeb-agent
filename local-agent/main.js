@@ -4,6 +4,7 @@ const fs = require('fs');
 const { ElectronBlocker, parseFilters } = require('@cliqz/adblocker-electron');
 const fetch = require('cross-fetch');
 const { log } = require('./utils/logConfig');
+const NetworkMonitor = require('./services/network');
 
 /**
  * HARDWARE & PERFORMANCE OPTIMIZATIONS
@@ -29,7 +30,6 @@ const { configureGpu, configureMemory, registerGpuCrashHandlers } = require('./s
 const { getGpuStatus } = require('./services/gpuCheck');
 const { createTray, openControlWindow } = require('./services/tray');
 const commandHandlers = require('./handlers/commands');
-const NetworkMonitor = require('./services/network');
 
 // App state management
 const managedWindows = new Map();
@@ -94,7 +94,7 @@ ipcMain.on('agent-action', (event, { action }) => {
 });
 
 ipcMain.handle('get-app-version', () => AGENT_VERSION);
-ipcMain.handle('get-gpu-status', () => getGpuStatus());
+ipcMain.handle('get-gpu-status', (event, options) => getGpuStatus(options));
 
 /**
  * IPC HANDLERS - Display & Content Management
@@ -288,6 +288,10 @@ app.whenReady().then(async () => {
 
                 // Save to cache for next boot
                 const buffer = blocker.serialize();
+                if (!fs.existsSync(CONFIG_DIR)) {
+                    fs.mkdirSync(CONFIG_DIR, { recursive: true });
+                }
+                
                 fs.writeFileSync(ADBLOCK_CACHE_PATH, buffer);
                 log.info('[ADBLOCK]: Motor serializado y guardado en cache.');
             }
