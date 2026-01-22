@@ -13,7 +13,7 @@
 <body>
     <div id="boot-overlay" class="boot-overlay">
         <div class="boot-logo">
-            <span class="material-icons" style="font-size: 32px; color: white;">monitor</span>
+            <span class="material-icons" style="font-size: 32px; color: white;"></span>
         </div>
         <div class="boot-text">Iniciando Screens</div>
         <div class="boot-subtext" id="boot-status">Sincronizando sistemas...</div>
@@ -49,15 +49,16 @@
                     Pantallas Conectadas
                 </div>
                 <div class="panel-header-actions">
-                     <button class="btn btn-secondary" onclick="identifyAllScreens()" title="Identificar todas las pantallas" 
+                    <button class="btn btn-secondary" onclick="identifyAllScreens()"
+                        title="Identificar todas las pantallas"
                         style="width: auto; height: 30px; padding: 0 12px; font-size: 11px; gap: 6px; min-height: 0;">
                         <span class="material-icons" style="font-size: 16px;">visibility</span>
                         IDENTIFICAR PANTALLAS
                     </button>
-                <span class="screens-count" id="screens-count">0</span>
+                    <span class="screens-count" id="screens-count">0</span>
+                </div>
             </div>
-        </div>
-        <div class="screens-list" id="screens-list"></div>
+            <div class="screens-list" id="screens-list"></div>
         </div>
 
         <div class="controls-panel">
@@ -66,13 +67,13 @@
                     <div class="gpu-badge" id="gpu-badge">
                         <span class="material-icons gpu-icon" id="gpu-icon">memory</span>
                         <div class="gpu-info-text">
-                            <span class="gpu-name" id="gpu-name" style="color:#fff; font-weight:600; display:block; font-size:11px;">
-                                Cargando...
+                            <span class="gpu-name" id="gpu-name"
+                                style="color:#fff; font-weight:600; display:block; font-size:11px;">
+                                GPU: <span id="gpu-info"></span>
                             </span>
                         </div>
-                        <span class="material-icons refresh-gpu-btn" 
-                              onclick="updateGpuStatus(true)" 
-                              title="Volver a escanear hardware">
+                        <span class="material-icons refresh-gpu-btn" onclick="updateGpuStatus(true)"
+                            title="Escanear hardware gpu">
                             refresh
                         </span>
                     </div>
@@ -154,7 +155,14 @@
         function showModal(title, message, confirmText = 'Aceptar', isDanger = false) {
             return new Promise((resolve) => {
                 document.getElementById('modal-title').textContent = title;
-                document.getElementById('modal-message').textContent = message;
+                const msgElement = document.getElementById('modal-message');
+                if (message && message.trim() !== '') {
+                    msgElement.textContent = message;
+                    msgElement.style.display = 'block'; 
+                } else {
+                    msgElement.style.display = 'none';  
+                }
+
                 const confirmBtn = document.getElementById('modal-confirm');
                 confirmBtn.textContent = confirmText;
                 confirmBtn.classList.toggle('danger', isDanger);
@@ -218,22 +226,22 @@
                 const actionsDiv = card.querySelector('.screen-actions-container');
                 // Reconstruimos el HTML de los botones para asegurar que el estado (close/refresh) es correcto
                 const actionsHtml = `
-                    <button class="btn-mini secondary" onclick="window.electron.identifyScreen('${screen.id}')" title="Identificar esta pantalla">
-                        <span class="material-icons" style="font-size:14px;">visibility</span>
+                    <button class="btn btn-secondary" onclick="window.electron.identifyScreen('${screen.id}')" title="Identificar esta pantalla">
+                        <span class="material-icons">visibility</span>
                     </button>
-                    <button class="btn-mini primary" onclick="sendUrl('${screen.id}', this)">
-                        <span class="material-icons" style="font-size:14px;">send</span> Enviar
+                    <button class="btn btn-primary" onclick="sendUrl('${screen.id}', this)">
+                        <span class="material-icons">send</span> ENVIAR
                     </button>
                     ${screen.hasContent ? `
-                        <button class="btn-mini secondary" onclick="refreshScreen('${screen.id}')" title="Recargar">
-                            <span class="material-icons" style="font-size:14px;">refresh</span>
+                        <button class="btn btn-secondary" onclick="refreshScreen('${screen.id}')" title="Recargar">
+                            <span class="material-icons">refresh</span>
                         </button>
-                        <button class="btn-mini danger" onclick="closeScreen('${screen.id}')" title="Cerrar">
-                            <span class="material-icons" style="font-size:14px;">close</span>
+                        <button class="btn btn-danger" onclick="closeScreen('${screen.id}')" title="Cerrar">
+                            <span class="material-icons">close</span>
                         </button>
                     ` : ''}
                 `;
-        
+
                 if (actionsDiv.innerHTML.trim() !== actionsHtml.trim()) {
                     actionsDiv.innerHTML = actionsHtml;
                 }
@@ -246,7 +254,7 @@
             });
         }
         function renderScreenCard(screen) {
-    return `
+            return `
         <div class="screen-card ${screen.hasContent ? 'active' : 'empty'}" data-id="${screen.id}">
             <div class="screen-header">
                 <div style="display: flex; align-items: center; gap: 10px;">
@@ -283,20 +291,17 @@
                 </div>
 
                 <div class="screen-actions-container">
-                    <button class="btn-secondary" onclick="window.electron.identifyScreen('${screen.id}')" title="Identificar">
+                    <button class="btn btn-secondary" onclick="window.electron.identifyScreen('${screen.id}')" title="Identificar esta pantalla">
                         <span class="material-icons">visibility</span>
                     </button>
-                    <button class="btn-primary" onclick="sendUrl('${screen.id}', this)">
+                    <button class="btn btn-primary" onclick="sendUrl('${screen.id}', this)">
                         <span class="material-icons">send</span> ENVIAR
                     </button>
                     
                     ${screen.hasContent ? `
-                        <!-- Recargar -->
                         <button class="btn btn-secondary" onclick="refreshScreen('${screen.id}')" title="Recargar">
                             <span class="material-icons">refresh</span>
                         </button>
-                        
-                        <!-- Cerrar (Usamos btn-danger para rojo) -->
                         <button class="btn btn-danger" onclick="closeScreen('${screen.id}')" title="Cerrar">
                             <span class="material-icons">close</span>
                         </button>
@@ -305,7 +310,7 @@
             </div>
         </div>
     `;
-}
+        }
         function renderStatusHtml(screen) {
             return screen.hasContent ?
                 `<div style="color:var(--color-success); display:flex; align-items:center; gap:6px; font-weight:600;">
@@ -363,10 +368,29 @@
             const url = select.value;
             const interval = parseInt(refreshInput.value) || 0;
 
-            if (!url) return showNotification('Selecciona contenido', 'warning');
+            if (!url) {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                return showNotification('Selecciona contenido', 'warning');
+            }
 
             let credentials = null;
             const contentName = select.options[select.selectedIndex].text;
+
+            // LuckiaTV single-screen restriction: Check if already playing on another screen
+            const isLuckiaTV = url.includes('sportradar.com') || contentName.toLowerCase() === 'luckia tv';
+            if (isLuckiaTV) {
+                const otherScreenWithLuckiaTV = screens.find(s =>
+                    s.id !== screenId &&
+                    s.hasContent &&
+                    (s.url?.includes('sportradar.com') || s.contentName?.toLowerCase() === 'luckia tv')
+                );
+                if (otherScreenWithLuckiaTV) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                    return showNotification(`Luckia TV ya está en Pantalla ${otherScreenWithLuckiaTV.id}. Solo puede reproducirse en una pantalla.`, 'warning');
+                }
+            }
 
             // Luckia-specific credentials handling
             if (contentName.toLowerCase().includes('luckia')) {
@@ -377,6 +401,8 @@
                     await window.electron.saveCredential('luckia_user', user);
                     await window.electron.saveCredential('luckia_pass', pass);
                 } else {
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
                     return showNotification('Luckia requiere credenciales', 'warning');
                 }
             }
@@ -402,7 +428,7 @@
         }
 
         async function closeScreen(screenId) {
-            if (await showModal('Cerrar Contenido', `¿Cerrar pantalla ${screenId}?`, 'Cerrar', true)) {
+            if (await showModal(`Cerrar Pantalla ${screenId}`, '', 'Cerrar', true)) {
                 window.electron.closeScreen(screenId);
                 setTimeout(loadScreens, 300);
             }
@@ -459,7 +485,7 @@
         async function updateGpuStatus(force = false) {
             const btn = document.querySelector('.refresh-gpu-btn');
             const nameLabel = document.getElementById('gpu-name');
-    
+
             // Feedback visual de carga
             if (force && btn) btn.classList.add('spin-animate');
             if (force) nameLabel.style.opacity = '0.5';
@@ -467,10 +493,10 @@
             try {
                 // Pasamos { force: true } si el usuario hizo clic
                 const status = await window.electron.getGpuStatus({ force: force });
-                
+
                 document.getElementById('gpu-name').textContent = status.gpuName;
                 const b = document.getElementById('gpu-badge');
-        
+
                 if (status.isOptimal) {
                     b.className = 'gpu-badge optimal';
                     document.getElementById('gpu-icon').textContent = 'check_circle';
@@ -481,7 +507,6 @@
             } catch (err) {
                 console.error("GPU Check failed", err);
             } finally {
-                // Quitar animación
                 if (btn) btn.classList.remove('spin-animate');
                 nameLabel.style.opacity = '1';
             }
@@ -489,12 +514,19 @@
 
         document.getElementById('btn-minimize').addEventListener('click', () => window.electron.minimizeWindow());
         document.getElementById('btn-window-close').addEventListener('click', () => window.electron.closeWindow());
+
         document.getElementById('btn-restart').addEventListener('click', async () => {
-            if (await showModal('Reiniciar App', '¿Reiniciar Screens?', 'Reiniciar')) window.electron.sendAction('restart');
+            if (await showModal('Reiniciar Aplicación', '', 'Reiniciar')) {
+                window.electron.sendAction('restart');
+            }
         });
+
         document.getElementById('btn-quit').addEventListener('click', async () => {
-            if (await showModal('Cerrar App', '¿Cerrar Screens?', 'Cerrar', true)) window.electron.sendAction('quit');
+            if (await showModal('Cerrar Aplicación', '', 'Cerrar', true)) {
+                window.electron.sendAction('quit');
+            }
         });
+
         document.getElementById('btn-logs').addEventListener('click', () => window.electron.sendAction('open-logs'));
         document.getElementById('btn-update').addEventListener('click', () => {
             showNotification('Buscando actualizaciones...', 'info');
@@ -561,40 +593,29 @@
         window.electron.onScreensChanged(() => {
             console.log('Hardware change detected, forcing structural refresh');
             const container = document.getElementById('screens-list');
-            if (container) container.dataset.screenIds = ''; // Clear to force redraw
+            if (container) container.dataset.screenIds = '';
             loadScreens();
         });
 
         async function initApp() {
             const bootOverlay = document.getElementById('boot-overlay');
             const bootStatus = document.getElementById('boot-status');
-            updateGpuStatus(false);
 
             try {
-                // Phase 1: Basic App Info & Settings
                 bootStatus.textContent = 'Configurando entorno...';
                 await checkSetup();
                 const version = await window.electron.getAppVersion();
                 document.getElementById('agent-version').textContent = 'v' + version;
 
-                // Phase 2: Presets (Crucial for UI population)
                 bootStatus.textContent = 'Cargando contenidos...';
                 await loadPresets();
-
-                // Phase 3: Hardware & GPU
-                bootStatus.textContent = 'Detectando hardware...';
-                await Promise.all([
-                    loadScreens(),
-                    updateGpuStatus()
-                ]);
-
-                // Phase 4: Finish line
+                bootStatus.textContent = 'Detectando pantallas...';
+                await loadScreens();
                 bootStatus.textContent = 'Listo';
                 setTimeout(() => {
                     bootOverlay.classList.add('hidden');
                 }, 500);
 
-                // Start background polling only after initial load success
                 setInterval(loadScreens, 2000);
             } catch (err) {
                 console.error('Boot error:', err);

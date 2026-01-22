@@ -1,8 +1,7 @@
 const { app, BrowserWindow, screen, ipcMain, shell, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { ElectronBlocker, parseFilters } = require('@cliqz/adblocker-electron');
-const fetch = require('cross-fetch');
+
 const { log } = require('./utils/logConfig');
 const NetworkMonitor = require('./services/network');
 
@@ -88,7 +87,6 @@ ipcMain.on('agent-action', (event, { action }) => {
             break;
         case 'update':
             log.info('[UPDATE]: Iniciando busqueda de actualizaciones (Manual)...');
-            // Logic for update check would go here; for now, we just log it.
             break;
     }
 });
@@ -217,8 +215,7 @@ ipcMain.handle('save-settings', (event, settings) => {
 });
 
 /**
- * DISPLAY MANAGEMENT (HOT-PLUG)
- * Debounced refresh when monitors are connected/disconnected.
+ * DISPLAY MANAGEMENT
  */
 function onScreenChange() {
     if (screenChangeTimeout) clearTimeout(screenChangeTimeout);
@@ -226,7 +223,6 @@ function onScreenChange() {
         log.info('[DISPLAY]: Cambio detectado, re-mapeando pantallas...');
         await buildDisplayMap(hardwareIdToDisplayMap);
 
-        // Notify control panel to perform a structural refresh
         const controlWindow = require('./services/tray').getControlWindow?.();
         if (controlWindow && !controlWindow.isDestroyed()) {
             controlWindow.webContents.send('screens-changed');
@@ -234,7 +230,6 @@ function onScreenChange() {
     }, CONSTANTS.SCREEN_DEBOUNCE_MS);
 }
 
-// Ensure single instance and focus control window on second launch
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
     app.quit();
@@ -244,7 +239,6 @@ if (!gotTheLock) {
     });
 }
 
-// Initial system configurations
 configureGpu();
 configureMemory();
 registerGpuCrashHandlers();
@@ -254,61 +248,16 @@ if (app.isPackaged) {
 }
 
 /**
- * MAIN APP STARTUP
+ * APP STARTUP
  */
 app.whenReady().then(async () => {
     log.info('[INIT]: Screens Standalone Ready.');
-
-    // Phase 1: Immediate UI Availability
     createTray(AGENT_VERSION);
     await buildDisplayMap(hardwareIdToDisplayMap);
 
-    // Phase 2: Background Optimizations (Staggered to prevent UI hang)
-    setTimeout(async () => {
-        try {
-            // 1. Initial Cache Clear
-            await session.defaultSession.clearCache();
-            log.info('[MEMORY]: Cache HTTP de inicio limpiada.');
-
-            // 2. Optimized Adblocker Load
-            let blocker;
-            const { ADBLOCK_CACHE_PATH } = require('./config/constants');
-
-            if (fs.existsSync(ADBLOCK_CACHE_PATH)) {
-                log.info('[ADBLOCK]: Cargando motor desde cache...');
-                const buffer = fs.readFileSync(ADBLOCK_CACHE_PATH);
-                blocker = ElectronBlocker.deserialize(buffer);
-            } else {
-                log.info('[ADBLOCK]: Inicializando nuevo motor (primera vez)...');
-                blocker = await ElectronBlocker.fromPrebuiltAdsAndTracking(fetch);
-
-                // Add whitelist before caching
-                const { networkFilters, cosmeticFilters, preprocessors } = parseFilters('@@||bannerflow.net^');
-                blocker.update({
-                    newNetworkFilters: networkFilters,
-                    newCosmeticFilters: cosmeticFilters,
-                    newPreprocessors: preprocessors
-                });
-
-                // Save to cache for next boot
-                const buffer = blocker.serialize();
-                if (!fs.existsSync(CONFIG_DIR)) {
-                    fs.mkdirSync(CONFIG_DIR, { recursive: true });
-                }
-                
-                fs.writeFileSync(ADBLOCK_CACHE_PATH, buffer);
-                log.info('[ADBLOCK]: Motor serializado y guardado en cache.');
-            }
-
-            blocker.enableBlockingInSession(session.defaultSession);
-            log.info('[ADBLOCK]: Filtros de publicidad activados.');
-
-        } catch (err) {
-            log.error('[INIT]: Error en optimizaciones de fondo:', err);
-        }
-    }, 100);
-
-    // Phase 3: Secondary Services
+    session.defaultSession.clearCache().then(() => {
+        log.info('[MEMORY]: Cache HTTP de inicio limpiada.');
+    }).catch(() => { });
     networkMonitor.start(5000);
     restoreLastState(hardwareIdToDisplayMap, handleShowUrl);
 
@@ -329,7 +278,6 @@ setInterval(() => {
     }
 }, CONSTANTS.GC_INTERVAL_MS || 4 * 60 * 60 * 1000);
 
-// Flush caches to prevent disk/RAM bloat over time
 setInterval(() => {
     managedWindows.forEach(win => {
         if (win && !win.isDestroyed()) win.webContents.session.clearCache().catch(() => { });
