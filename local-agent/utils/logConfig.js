@@ -3,7 +3,6 @@ const path = require('path');
 const fs = require('fs');
 
 /**
- * LOGGING CONFIGURATION
  * Local-only transport since the removal of the socket hook.
  */
 log.transports.file.level = 'info';
@@ -13,7 +12,6 @@ log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}';
 
 /**
  * LOG ROTATION
- * Archives old files with a timestamp suffix.
  */
 log.transports.file.archiveLogFn = (oldPath) => {
     const info = path.parse(oldPath);
@@ -22,7 +20,6 @@ log.transports.file.archiveLogFn = (oldPath) => {
 };
 
 /**
- * HOUSEKEEPING
  * Deletes log files older than 7 days.
  */
 function cleanOldLogs() {
@@ -52,7 +49,6 @@ cleanOldLogs();
 setInterval(cleanOldLogs, 24 * 60 * 60 * 1000);
 
 /**
- * UPDATER LOGS
  * Helper object for update-related diagnostic logging.
  */
 const updaterLog = {

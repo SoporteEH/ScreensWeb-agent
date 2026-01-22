@@ -17,15 +17,14 @@ function createTray(version) {
 
         const contextMenu = Menu.buildFromTemplate([
             { label: `Screens v${version}`, enabled: false },
-            { label: 'Modo: Standalone (Local)', enabled: false },
             { type: 'separator' },
             {
-                label: 'Abrir Panel de Control',
+                label: 'Panel de Control',
                 click: () => openControlWindow(version)
             },
             { type: 'separator' },
             {
-                label: 'Reiniciar App',
+                label: 'Reiniciar',
                 click: () => {
                     log.info('[TRAY]: Solicitando reinicio...');
                     app.relaunch();
@@ -116,7 +115,7 @@ function openControlWindow(version) {
      */
     controlWindow.on('minimize', () => {
         controlWindow.webContents.setBackgroundThrottling(true);
-        log.info('[MEMORY]: Panel de Control hibernado (minimizacion).');
+        log.info('[MEMORY]: Panel de Control minimizado');
     });
 
     controlWindow.on('restore', () => {
