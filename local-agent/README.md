@@ -9,13 +9,13 @@ Desktop application for Windows-based digital signage systems. **Screens** is a 
 - [Architecture](#architecture)
 - [Technology Stack](#technology-stack)
 - [Requirements](#requirements)
-- [Installation](#installation)
+- [Installation & Testing](#installation--testing)
 - [Project Structure](#project-structure)
-- [Maintenance & Optimizations](#maintenance--optimizations)
+- [Enterprise Readiness](#enterprise-readiness)
 
 ## Overview
 
-**Screens** is installed on venue PCs to display and manage digital content (URLs or local media) across multiple monitors. Unlike previous versions, this app functions 100% offline and is controlled entirely through its local **Control Panel**.
+**Screens** is installed on venue PCs to display and manage digital content (URLs or local media) across multiple monitors. This app functions 100% offline and is controlled entirely through its local **Control Panel**.
 
 **Core Responsibilities:**
 - Detect and manage multiple physical displays automatically.
@@ -33,17 +33,13 @@ Desktop application for Windows-based digital signage systems. **Screens** is a 
 
 **Hardware Optimization**
 - **GPU Check**: Real-time diagnostic to ensure monitors are connected to the Dedicated GPU (crucial for performance).
-- **Memory Management**: Manual Garbage Collection triggered periodically to prevent memory leaks in long-running sessions.
-- **Hardware Acceleration**: Optimized Chromium flags for smooth video and animation playback.
+- **Memory Tracking**: Enhanced WeakMap-based listener registry to prevent memory leaks in event listeners.
+- **Manual GC**: Periodic garbage collection for stability in 24/7 signage sessions.
 
-**Local Persistence**
-- **State Recovery**: If the PC restarts, Screens automatically restores the last URLs and programs assigned to each monitor.
-- **Credential Storage**: Securely saves Luckia TV credentials locally.
-
-**Local Control Panel**
-- Centralized UI to send URLs to specific screens.
-- Real-time status of connected monitors and GPU health.
-- Quick actions: Refresh Screen, Restart App, Power Off.
+**Security & Resilience**
+- **AES-256-GCM Encryption**: Sensitive credentials are encrypted using machine-specific keys.
+- **State Recovery**: Robust session restoration that never stores plaintext credentials in state files.
+- **Network Resilience**: Active polling (5s) with automatic fallback to offline content and seamless recovery once connectivity is restored.
 
 ## Architecture
 
@@ -61,16 +57,17 @@ graph TD
     D --> I[Manual GC Service]
     D --> J[State Persistence]
     
-    J -- JSON --> K[Local Storage]
+    J -- Encrypted JSON --> K[Local Storage]
 ```
 
 ## Technology Stack
 
-- **Framework:** Electron 38.x (Node.js 18+)
+- **Framework:** Electron 38.x (Node.js 20+)
+- **Security:** AES-256-GCM (Credential Encryption)
+- **Testing:** Jest (Enterprise-grade coverage)
 - **Storage:** Local JSON files (`state.json`, `secrets.json`)
-- **Logging:** `electron-log` (Local rotation only)
+- **Logging:** `electron-log` (Local rotation & 7-day automated cleanup)
 - **Styling:** Vanilla CSS / HTML for maximum performance
-- **Security:** Context Isolation & Preload scripts enabled.
 
 ## Requirements
 
@@ -78,7 +75,7 @@ graph TD
 - **RAM:** Minimum 4GB (Optimized for low-memory PCs)
 - **GPU:** Dedicated graphics card (Recommended for multi-screen setups)
 
-## Installation
+## Installation & Testing
 
 ### Development
 ```bash
@@ -88,8 +85,15 @@ npm install
 npm start
 ```
 
+### Automated Testing
+Professional test suite covering core services, encryption, and handlers.
+```bash
+npm test
+npm run test:watch
+npm run test:coverage
+```
+
 ### Production Build
-Generates a standalone installer (`.exe`).
 ```bash
 npm run build
 ```
@@ -98,31 +102,33 @@ npm run build
 
 ```
 local-agent/
+├── __tests__/             # Comprehensive Unit Test Suite (Jest)
 ├── config/
-│   └── constants.js           # Local paths, timeouts, and hardware limits
+│   └── constants.js       # Local paths, timeouts, and hardware limits
 ├── handlers/
-│   └── commands.js            # Core UI command execution (show_url, close, refresh)
+│   └── commands.js        # Core UI execution (leak-proof window management)
 ├── services/
-│   ├── device.js              # Hardware ID and System commands
-│   ├── gpu.js                 # GPU config and memory optimization
-│   ├── gpuCheck.js            # Dedicated GPU connection diagnostic
-│   ├── state.js               # Screen session persistence (JSON)
-│   ├── tray.js                # System tray & Control Window management
+│   ├── network.js         # Robus polling & automatic content recovery
+│   ├── state.js           # Screen session persistence (Async I/O)
+│   ├── gpuCheck.js        # Dedicated GPU connection diagnostic
+│   ├── tray.js            # System tray & Control Window management
 ├── utils/
-│   └── logConfig.js           # Local logging & rotation
-├── control.html               # Main Control Panel UI
-├── fallback.html              # Offline/Error fallback page
-├── identify.html              # Screen numbering overlay
-├── package.json               # dependencies and build scripts
+│   ├── encryption.js      # AES-256-GCM security service
+│   └── logConfig.js       # Local logging with automated 7-day rotation
+├── control.html           # Main Control Panel UI
+└── package.json           # Scripts, dependencies and build config
 ```
 
-## Maintenance & Optimizations
+## Enterprise Readiness
 
-### Memory Leaks
-Due to the persistent nature of digital signage, the app:
-1. Runs `global.gc()` every 4 hours.
-2. Clears Chromium cache every hour.
-3. Disables `backgroundThrottling` to ensure hidden windows or iframes keep rendering.
+### Security Hardening
+Credentials are never stored in the general `state.json`. Sensitive data is stored in `secrets.json` using authenticated encryption (GCM), ensuring data integrity and confidentiality.
 
-### GPU Protection
-The built-in **GPU Diagnostic** checks if the primary display is running on the integrated Intel/AMD chip instead of the dedicated NVIDIA/AMD card, alerting the user to move the HDMI/DP cable.
+### Long-Run Stability
+Designed for 24/7 operation:
+1. **Event Listener Cleanup**: Explicit tracking of window listeners avoids memory bloat.
+2. **Periodic Maintenance**: Automated cache clearing and garbage collection.
+3. **Log Rotation**: Automated cleanup of logs older than 7 days to prevent disk filling.
+
+### High Test Coverage
+Crucial project paths (Encryption, State, Handlers, Network) are protected by a comprehensive Jest suite, ensuring that updates don't break signage availability.

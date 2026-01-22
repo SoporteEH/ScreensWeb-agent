@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs').promises;
 
 const { log } = require('./utils/logConfig');
+const encryption = require('./utils/encryption');
 const NetworkMonitor = require('./services/network');
 
 /**
@@ -181,11 +182,28 @@ ipcMain.handle('get-credential', async (event, key) => {
             await fs.access(CREDENTIALS_FILE_PATH);
             const data = await fs.readFile(CREDENTIALS_FILE_PATH, 'utf8');
             const creds = JSON.parse(data);
-            return creds[key] || null;
+
+            if (!creds[key]) return null;
+
+            // If encrypted, decrypt
+            if (creds[key].encrypted) {
+                try {
+                    return encryption.decrypt(creds[key]);
+                } catch (err) {
+                    log.error('[SECURITY]: Failed to decrypt credential, may be corrupted:', err.message);
+                    return null;
+                }
+            }
+
+            // Legacy plaintext - return as-is (will be encrypted on next save)
+            log.warn(`[SECURITY]: Credential '${key}' is in plaintext, will be encrypted on next save`);
+            return creds[key];
         } catch {
             return null;
         }
-    } catch (e) { log.error('Error creds:', e); }
+    } catch (e) {
+        log.error('[CREDENTIAL]: Error reading credential:', e);
+    }
     return null;
 });
 
@@ -198,7 +216,15 @@ ipcMain.handle('save-credential', async (event, key, value) => {
             data = JSON.parse(content);
         } catch (e) { /* ignore if not exists/corrupt */ }
 
-        data[key] = value;
+        // Encrypt credential before saving
+        try {
+            data[key] = encryption.encrypt(value);
+            log.info(`[SECURITY]: Credential '${key}' encrypted and saved`);
+        } catch (encErr) {
+            log.error('[SECURITY]: Encryption failed, saving as plaintext (fallback):', encErr.message);
+            data[key] = value; // Fallback to plaintext if encryption fails
+        }
+
         const dir = path.dirname(CREDENTIALS_FILE_PATH);
         try {
             await fs.access(dir);
@@ -207,7 +233,10 @@ ipcMain.handle('save-credential', async (event, key, value) => {
         }
         await fs.writeFile(CREDENTIALS_FILE_PATH, JSON.stringify(data, null, 2));
         return true;
-    } catch (e) { log.error('Error saving creds:', e); return false; }
+    } catch (e) {
+        log.error('[CREDENTIAL]: Error saving credential:', e);
+        return false;
+    }
 });
 
 ipcMain.handle('get-settings', async () => {

@@ -1,6 +1,5 @@
 const { screen } = require('electron');
-const fs = require('fs').promises; // Use promises API
-const fsSync = require('fs'); // Keep sync for specific checks if needed, but prefer async
+const fs = require('fs').promises;
 const { log } = require('../utils/logConfig');
 const { STATE_FILE_PATH } = require('../config/constants');
 const path = require('path');
@@ -45,7 +44,6 @@ async function loadLastState() {
             if (typeof value === 'string') {
                 migratedState[key] = {
                     url: value,
-                    credentials: null,
                     timestamp: new Date().toISOString()
                 };
             } else {
@@ -113,7 +111,8 @@ async function saveCurrentState(screenIndex, url, credentials, refreshInterval, 
         state[screenIndex] = {
             url: url,
             contentName: contentName || null,
-            credentials: credentials || null,
+            // Security: Never store credentials in state file
+            // Credentials are stored encrypted in secrets.json instead
             refreshInterval: refreshInterval || 0,
             timestamp: new Date().toISOString()
         };
@@ -156,7 +155,9 @@ async function restoreLastState(hardwareIdToDisplayMap, handleShowUrlCallback) {
                 action: 'show_url',
                 screenIndex: stableId,
                 url: screenData.url,
-                credentials: screenData.credentials || null,
+                // Credentials are NOT restored from state
+                // They will be retrieved from secrets.json if needed
+                credentials: null,
                 refreshInterval: screenData.refreshInterval || 0,
                 contentName: screenData.contentName || null
             };

@@ -5,8 +5,9 @@ const { log } = require('../utils/logConfig');
 const { CONTENT_DIR } = require('../config/constants');
 
 let context = {};
-// Set para evitar múltiples cargas simultáneas en la misma pantalla (Race Condition)
 const loadingScreens = new Set();
+// WeakMap to track event listeners for proper cleanup
+const listenerRegistry = new WeakMap();
 
 /**
  * Dependency injection to keep handlers decoupled from the main process.
@@ -74,38 +75,76 @@ function createContentWindow(display, urlToLoad, command) {
         }
     });
 
-    // Cleanup reference
+    // Initialize listener registry for this window
+    const listeners = {
+        'ready-to-show': null,
+        'did-fail-load': null,
+        'closed': null,
+        timeout: null
+    };
+    listenerRegistry.set(win, listeners);
+
+    // Enhanced cleanup function
     const cleanup = () => {
+        // Clear timeout
+        if (listeners.timeout) {
+            clearTimeout(listeners.timeout);
+            listeners.timeout = null;
+        }
+
+        // Clear retry manager
         if (context.retryManager.has(screenIndex)) {
             clearTimeout(context.retryManager.get(screenIndex).timerId);
             context.retryManager.delete(screenIndex);
         }
+
         loadingScreens.delete(screenIndex);
         context.managedWindows.delete(screenIndex);
 
-        // Fix: Ensure window and webContents still exist before trying to remove listeners
+        // Remove ALL registered event listeners
         if (win && !win.isDestroyed()) {
-            win.webContents.removeAllListeners();
+            const registeredListeners = listenerRegistry.get(win);
+            if (registeredListeners) {
+                // Remove window-level listeners
+                Object.entries(registeredListeners).forEach(([event, handler]) => {
+                    if (event !== 'timeout' && handler) {
+                        try {
+                            win.removeListener(event, handler);
+                        } catch (e) { /* ignore */ }
+                    }
+                });
+
+                // Remove webContents listeners
+                if (win.webContents && !win.webContents.isDestroyed()) {
+                    win.webContents.removeAllListeners('did-fail-load');
+                    win.webContents.removeAllListeners('did-finish-load');
+                }
+            }
         }
+
+        listenerRegistry.delete(win);
     };
 
     // Timeout de seguridad
-    const loadTimeout = setTimeout(() => {
+    listeners.timeout = setTimeout(() => {
         if (!win.isDestroyed() && win.webContents.isLoading()) {
             log.warn(`[TIMEOUT]: Carga lenta en Pantalla ${screenIndex}. Forzando parada.`);
             win.webContents.stop();
         }
     }, 20000);
 
-    win.once('ready-to-show', () => {
+    // Register and use ready-to-show listener
+    listeners['ready-to-show'] = () => {
         if (!win.isDestroyed()) {
             win.show();
-            clearTimeout(loadTimeout);
+            if (listeners.timeout) clearTimeout(listeners.timeout);
         }
-    });
+    };
+    win.once('ready-to-show', listeners['ready-to-show']);
 
-    win.webContents.on('did-fail-load', (e, code, desc, url) => {
-        clearTimeout(loadTimeout);
+    // Register and use did-fail-load listener
+    listeners['did-fail-load'] = (e, code, desc, url) => {
+        if (listeners.timeout) clearTimeout(listeners.timeout);
         if (win.isDestroyed() || url.includes('fallback.html')) return;
 
         log.warn(`[FAIL-LOAD]: Pantalla ${screenIndex} (${code}: ${desc})`);
@@ -117,9 +156,12 @@ function createContentWindow(display, urlToLoad, command) {
         } else {
             sendCommandFeedback(command, 'error', `Error cargando archivo local: ${contentName || url}`);
         }
-    });
+    };
+    win.webContents.on('did-fail-load', listeners['did-fail-load']);
 
-    win.on('closed', cleanup);
+    // Register and use closed listener
+    listeners['closed'] = cleanup;
+    win.on('closed', listeners['closed']);
 
     // Intentar cargar la URL inicial
     win.loadURL(urlToLoad).catch(err => {
@@ -205,8 +247,49 @@ async function handleShowUrl(command, currentAttempt = 0) {
             win = createContentWindow(targetDisplay, finalUrl, command);
         }
 
-        // 7. Lógica de Inyección de Credenciales (Auto-Login)
-        if (credentials && !url.startsWith('local:')) {
+        // Lógica de Inyección de Credenciales (Auto-Login)
+        // If credentials not provided but URL requires autologin, load from secrets.json
+        let finalCredentials = credentials;
+
+        if (!finalCredentials && !url.startsWith('local:')) {
+            const currentUrl = finalUrl.toLowerCase();
+            const isSportradar = currentUrl.includes('sportradar.com');
+            const isLuckia = currentUrl.includes('luckia.tv') || currentUrl.includes('luckia.es');
+
+            if (isSportradar || isLuckia) {
+                // Load credentials from secrets.json
+                const { loadLastState } = require('../services/state');
+                const fs = require('fs').promises;
+                const { CREDENTIALS_FILE_PATH } = require('../config/constants');
+                const encryption = require('../utils/encryption');
+
+                try {
+                    const data = await fs.readFile(CREDENTIALS_FILE_PATH, 'utf8');
+                    const creds = JSON.parse(data);
+
+                    // Try to load luckia credentials first, then sportradar
+                    let username, password;
+
+                    if (creds['luckia_user'] && creds['luckia_pass']) {
+                        // Decrypt if encrypted
+                        if (creds['luckia_user'].encrypted) {
+                            username = encryption.decrypt(creds['luckia_user']);
+                            password = encryption.decrypt(creds['luckia_pass']);
+                        } else {
+                            username = creds['luckia_user'];
+                            password = creds['luckia_pass'];
+                        }
+
+                        finalCredentials = { username, password };
+                        log.info(`[AUTOLOGIN]: Loaded encrypted credentials from secrets.json`);
+                    }
+                } catch (err) {
+                    log.warn(`[AUTOLOGIN]: Could not load credentials from secrets.json: ${err.message}`);
+                }
+            }
+        }
+
+        if (finalCredentials && !url.startsWith('local:')) {
             const injectCredentials = () => {
                 if (!win || win.isDestroyed()) return;
                 const currentUrl = win.webContents.getURL();
@@ -216,8 +299,8 @@ async function handleShowUrl(command, currentAttempt = 0) {
 
                 if (!isSportradar && !isLuckia) return;
 
-                const userVal = credentials.username || credentials.user;
-                const passVal = credentials.password || credentials.pass;
+                const userVal = finalCredentials.username || finalCredentials.user;
+                const passVal = finalCredentials.password || finalCredentials.pass;
 
                 let userSelector = 'input[name="username"]';
                 let passSelector = 'input[name="password"]';
