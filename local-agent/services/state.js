@@ -1,7 +1,9 @@
 const { screen } = require('electron');
-const fs = require('fs');
+const fs = require('fs').promises; // Use promises API
+const fsSync = require('fs'); // Keep sync for specific checks if needed, but prefer async
 const { log } = require('../utils/logConfig');
 const { STATE_FILE_PATH } = require('../config/constants');
+const path = require('path');
 
 /**
  * Build display map ordered by physical position (left-to-right).
@@ -24,26 +26,33 @@ async function buildDisplayMap(hardwareIdToDisplayMap) {
 /**
  * Load persisted state from disk. Handles migration from old string-only states.
  */
-function loadLastState() {
+async function loadLastState() {
     try {
-        if (fs.existsSync(STATE_FILE_PATH)) {
-            const state = JSON.parse(fs.readFileSync(STATE_FILE_PATH, 'utf8')) || {};
-            const migratedState = {};
-
-            for (const [key, value] of Object.entries(state)) {
-                // Ensure state matches the current rich object format
-                if (typeof value === 'string') {
-                    migratedState[key] = {
-                        url: value,
-                        credentials: null,
-                        timestamp: new Date().toISOString()
-                    };
-                } else {
-                    migratedState[key] = value;
-                }
-            }
-            return migratedState;
+        // Check existence asynchronously to avoid race conditions (EEXIST), strictly try/catch read
+        try {
+            await fs.access(STATE_FILE_PATH);
+        } catch {
+            return {}; // File doesn't exist
         }
+
+        const data = await fs.readFile(STATE_FILE_PATH, 'utf8');
+        if (!data || data.trim() === '') return {};
+        const state = JSON.parse(data) || {};
+        const migratedState = {};
+
+        for (const [key, value] of Object.entries(state)) {
+            // Ensure state matches the current rich object format
+            if (typeof value === 'string') {
+                migratedState[key] = {
+                    url: value,
+                    credentials: null,
+                    timestamp: new Date().toISOString()
+                };
+            } else {
+                migratedState[key] = value;
+            }
+        }
+        return migratedState;
     } catch (error) {
         log.error('[STATE]: Error al leer el archivo de estado:', error);
     }
@@ -53,8 +62,8 @@ function loadLastState() {
 /**
  * Remove entries for monitors that are no longer physically connected.
  */
-function cleanOrphanedState(hardwareIdToDisplayMap) {
-    const state = loadLastState();
+async function cleanOrphanedState(hardwareIdToDisplayMap) {
+    const state = await loadLastState();
     const validIds = Array.from(hardwareIdToDisplayMap.keys());
     const cleanedState = {};
 
@@ -90,8 +99,9 @@ function setupAutoRefresh(screenIndex, intervalMinutes, managedWindows, autoRefr
 /**
  * Save current screen configuration and manage auto-refresh timers.
  */
-function saveCurrentState(screenIndex, url, credentials, refreshInterval, autoRefreshTimers, managedWindows, contentName) {
-    let state = loadLastState();
+async function saveCurrentState(screenIndex, url, credentials, refreshInterval, autoRefreshTimers, managedWindows, contentName) {
+    // Note: We load state first to merge updates. Ideally this should be atomic or cached in memory.
+    let state = await loadLastState();
 
     // Reset previous timer for this slot
     if (autoRefreshTimers.has(screenIndex)) {
@@ -116,9 +126,15 @@ function saveCurrentState(screenIndex, url, credentials, refreshInterval, autoRe
     }
 
     try {
-        const dir = require('path').dirname(STATE_FILE_PATH);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(STATE_FILE_PATH, JSON.stringify(state, null, 2));
+        const dir = path.dirname(STATE_FILE_PATH);
+        // Ensure directory exists using async access/mkdir
+        try {
+            await fs.access(dir);
+        } catch {
+            await fs.mkdir(dir, { recursive: true });
+        }
+
+        await fs.writeFile(STATE_FILE_PATH, JSON.stringify(state, null, 2));
     } catch (error) {
         log.error('[STATE]: Error al guardar estado:', error);
     }
@@ -127,9 +143,9 @@ function saveCurrentState(screenIndex, url, credentials, refreshInterval, autoRe
 /**
  * Re-launch content windows based on the last saved session state.
  */
-function restoreLastState(hardwareIdToDisplayMap, handleShowUrlCallback) {
+async function restoreLastState(hardwareIdToDisplayMap, handleShowUrlCallback) {
     log.info('[STATE]: Restaurando sesion...');
-    const lastState = cleanOrphanedState(hardwareIdToDisplayMap);
+    const lastState = await cleanOrphanedState(hardwareIdToDisplayMap);
 
     if (Object.keys(lastState).length === 0) return;
 

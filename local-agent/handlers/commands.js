@@ -6,7 +6,7 @@ const { CONTENT_DIR } = require('../config/constants');
 
 let context = {};
 // Set para evitar múltiples cargas simultáneas en la misma pantalla (Race Condition)
-const loadingScreens = new Set(); 
+const loadingScreens = new Set();
 
 /**
  * Dependency injection to keep handlers decoupled from the main process.
@@ -44,15 +44,12 @@ function scheduleRetry(command) {
     }
 
     const delayMs = Math.pow(2, attempt - 1) * 30 * 1000;
-    log.info(`[RETRY]: Programando reintento #${attempt} para pantalla ${screenIndex} en ${delayMs/1000}s`);
-    
+    log.info(`[RETRY]: Programando reintento #${attempt} para pantalla ${screenIndex} en ${delayMs / 1000}s`);
+
     const timerId = setTimeout(() => handleShowUrl(command, attempt), delayMs);
     context.retryManager.set(screenIndex, { attempt, timerId });
 }
 
-/**
- * Create and configure a content-hosting BrowserWindow.
- */
 function createContentWindow(display, urlToLoad, command) {
     const { screenIndex, url: originalUrl, contentName } = command;
     const fallbackPath = `file://${path.join(__dirname, '../fallback.html')}`;
@@ -62,9 +59,9 @@ function createContentWindow(display, urlToLoad, command) {
     const win = new BrowserWindow({
         x: display.bounds.x, y: display.bounds.y,
         width: display.bounds.width, height: display.bounds.height,
-        fullscreen: true, 
-        kiosk: true, 
-        frame: false, 
+        fullscreen: true,
+        kiosk: true,
+        frame: false,
         show: false,
         backgroundColor: '#000000',
         webPreferences: {
@@ -72,51 +69,57 @@ function createContentWindow(display, urlToLoad, command) {
             contextIsolation: true,
             webSecurity: false,
             allowRunningInsecureContent: true,
-            // Importante: backgroundThrottling false para que videos sigan reproduciendose si pierde foco
-            backgroundThrottling: false, 
-            preload: path.join(__dirname, '../content-preload.js') // Asegurarse que existe o quitar si no
+            backgroundThrottling: false,
+            preload: path.join(__dirname, '../content-preload.js')
         }
     });
 
-    // Timeout de seguridad: si no carga en 20s, mostrar fallback y liberar loadingScreens
-    const loadTimeout = setTimeout(() => {
-        if (!win.isDestroyed() && win.webContents.isLoading()) {
-            log.warn(`[TIMEOUT]: Carga lenta en Pantalla ${screenIndex}. Forzando parada.`);
-            win.webContents.stop();
-            // Esto dispararÃ¡ did-fail-load con error abortado
-        }
-    }, 20000);
-
-    win.once('ready-to-show', () => {
-        win.show();
-        clearTimeout(loadTimeout);
-    });
-
-    // Fallback logic for loading failures
-    win.webContents.on('did-fail-load', (e, code, desc, url) => {
-        clearTimeout(loadTimeout);
-        if (url.includes('fallback.html')) return; // Prevent infinite loop
-
-        log.warn(`[FAIL-LOAD]: Pantalla ${screenIndex} (${code}: ${desc})`);
-
-        // Remote URLs get retries and show fallback immediately
-        if (!originalUrl.startsWith('local:')) {
-            sendCommandFeedback(command, 'error', `Conexion perdida o lenta. Reintentando...`);
-            scheduleRetry(command);
-            win.loadURL(fallbackPath);
-        } else {
-            sendCommandFeedback(command, 'error', `Error cargando archivo local: ${contentName || url}`);
-        }
-    });
-
-    win.on('closed', () => {
-        context.managedWindows.delete(screenIndex);
+    // Cleanup reference
+    const cleanup = () => {
         if (context.retryManager.has(screenIndex)) {
             clearTimeout(context.retryManager.get(screenIndex).timerId);
             context.retryManager.delete(screenIndex);
         }
         loadingScreens.delete(screenIndex);
+        context.managedWindows.delete(screenIndex);
+
+        // Fix: Ensure window and webContents still exist before trying to remove listeners
+        if (win && !win.isDestroyed()) {
+            win.webContents.removeAllListeners();
+        }
+    };
+
+    // Timeout de seguridad
+    const loadTimeout = setTimeout(() => {
+        if (!win.isDestroyed() && win.webContents.isLoading()) {
+            log.warn(`[TIMEOUT]: Carga lenta en Pantalla ${screenIndex}. Forzando parada.`);
+            win.webContents.stop();
+        }
+    }, 20000);
+
+    win.once('ready-to-show', () => {
+        if (!win.isDestroyed()) {
+            win.show();
+            clearTimeout(loadTimeout);
+        }
     });
+
+    win.webContents.on('did-fail-load', (e, code, desc, url) => {
+        clearTimeout(loadTimeout);
+        if (win.isDestroyed() || url.includes('fallback.html')) return;
+
+        log.warn(`[FAIL-LOAD]: Pantalla ${screenIndex} (${code}: ${desc})`);
+
+        if (!originalUrl.startsWith('local:')) {
+            sendCommandFeedback(command, 'error', `Conexion perdida o lenta. Reintentando...`);
+            scheduleRetry(command);
+            win.loadURL(fallbackPath).catch(() => { });
+        } else {
+            sendCommandFeedback(command, 'error', `Error cargando archivo local: ${contentName || url}`);
+        }
+    });
+
+    win.on('closed', cleanup);
 
     // Intentar cargar la URL inicial
     win.loadURL(urlToLoad).catch(err => {
@@ -130,7 +133,7 @@ function createContentWindow(display, urlToLoad, command) {
 /**
  * MAIN ENTRY POINT: Load URL on a specific screen
  */
-function handleShowUrl(command, currentAttempt = 0) {
+async function handleShowUrl(command, currentAttempt = 0) {
     const { screenIndex, url, credentials, contentName, refreshInterval } = command;
 
     // 1. Protección contra Race Condition (Doble Clic)
@@ -157,13 +160,13 @@ function handleShowUrl(command, currentAttempt = 0) {
 
     // 3. Persistencia: Guardar estado ANTES de intentar cargar (Intención vs Realidad)
     if (context.saveCurrentState) {
-        context.saveCurrentState(
-            screenIndex, 
-            url, 
-            credentials, 
-            refreshInterval || 0, 
-            context.autoRefreshTimers, 
-            context.managedWindows, 
+        await context.saveCurrentState(
+            screenIndex,
+            url,
+            credentials,
+            refreshInterval || 0,
+            context.autoRefreshTimers,
+            context.managedWindows,
             contentName
         );
     }
@@ -173,11 +176,11 @@ function handleShowUrl(command, currentAttempt = 0) {
     if (!net.isOnline() && !url.startsWith('local:')) {
         log.error('[RESILIENCE]: Sin conexion para URL remota. Activando Fallback + Retry.');
         scheduleRetry(command);
-        
+
         // Cargar fallback inmediatamente si la ventana existe, si no, crearla con fallback
         let win = context.managedWindows.get(screenIndex);
         const fallbackUrl = `file://${path.join(__dirname, '../fallback.html')}`;
-        
+
         if (!win || win.isDestroyed()) {
             win = createContentWindow(targetDisplay, fallbackUrl, command);
         } else {
@@ -187,14 +190,14 @@ function handleShowUrl(command, currentAttempt = 0) {
     }
 
     // 5. Resolver URL Final
-    let finalUrl = url.startsWith('local:') 
-        ? `file://${path.join(CONTENT_DIR, url.substring(6))}` 
+    let finalUrl = url.startsWith('local:')
+        ? `file://${path.join(CONTENT_DIR, url.substring(6))}`
         : url;
 
     // 6. GestiÃ³n de Ventana
     try {
         let win = context.managedWindows.get(screenIndex);
-        
+
         // Limpiar listeners antiguos de inyecciÃ³n para evitar duplicados
         if (win && !win.isDestroyed()) {
             win.webContents.removeAllListeners('did-finish-load');
@@ -202,13 +205,12 @@ function handleShowUrl(command, currentAttempt = 0) {
             win = createContentWindow(targetDisplay, finalUrl, command);
         }
 
-        // 7. LÃ³gica de InyecciÃ³n de Credenciales (Auto-Login)
+        // 7. Lógica de Inyección de Credenciales (Auto-Login)
         if (credentials && !url.startsWith('local:')) {
-            const inject = () => {
-                if (win.isDestroyed()) return;
+            const injectCredentials = () => {
+                if (!win || win.isDestroyed()) return;
                 const currentUrl = win.webContents.getURL();
 
-                // DetecciÃ³n estricta de plataforma
                 const isSportradar = currentUrl.startsWith('https://lcr.sportradar.com');
                 const isLuckia = currentUrl.includes('luckia.tv') || currentUrl.includes('luckia.es');
 
@@ -221,7 +223,6 @@ function handleShowUrl(command, currentAttempt = 0) {
                 let passSelector = 'input[name="password"]';
                 let btnSelector = 'button[type="submit"]';
 
-                // Selectores especÃ­ficos de Luckia
                 if (isLuckia) {
                     userSelector = 'input[name="username"], input[name="user"], input[id*="user"], input[type="text"][placeholder*="Usuario"]';
                     passSelector = 'input[name="password"], input[name="pass"], input[id*="pass"], input[type="password"]';
@@ -253,12 +254,11 @@ function handleShowUrl(command, currentAttempt = 0) {
                                 if (u && p && b) {
                                     setNativeValue(u, ${JSON.stringify(userVal)});
                                     setNativeValue(p, ${JSON.stringify(passVal)});
-                                    // PequeÃ±a pausa visual antes de clickar
                                     setTimeout(() => { b.click(); resolve(true); }, 300);
                                     return;
                                 }
 
-                                if (attempts++ < 30) { // Reintentar durante 15s (30 * 500ms)
+                                if (attempts++ < 30) { 
                                     setTimeout(tryLogin, 500);
                                 } else {
                                     resolve(false);
@@ -271,18 +271,24 @@ function handleShowUrl(command, currentAttempt = 0) {
                 win.webContents.executeJavaScript(script).catch(err => log.error('[AUTOLOGIN] Error:', err));
             };
 
-            // Asegurar que solo se inyecta una vez
-            win.webContents.once('did-finish-load', inject);
+            win.webContents.once('did-finish-load', injectCredentials);
+
+            // Explicit cleanup listener
+            win.once('closed', () => {
+                if (win && !win.isDestroyed() && win.webContents) {
+                    win.webContents.removeListener('did-finish-load', injectCredentials);
+                }
+            });
         }
 
         // Cargar URL si la ventana ya existÃ­a (si es nueva, createContentWindow ya la carga)
         if (win.webContents.getURL() !== finalUrl) {
             win.loadURL(finalUrl).catch(e => log.warn(`[LOAD] Retry load: ${e.message}`));
         }
-        
+
         // Traer al frente
         win.show();
-        
+
         sendCommandFeedback(command, 'success', `Cargando: ${contentName || url}`);
 
     } catch (e) {
@@ -294,7 +300,7 @@ function handleShowUrl(command, currentAttempt = 0) {
 /**
  * Close content on a screen and clear state.
  */
-function handleCloseScreen(command) {
+async function handleCloseScreen(command) {
     const { screenIndex } = command;
     try {
         const win = context.managedWindows.get(screenIndex);
@@ -307,7 +313,7 @@ function handleCloseScreen(command) {
         }
 
         if (context.saveCurrentState) {
-            context.saveCurrentState(screenIndex, null, null, 0, context.autoRefreshTimers, context.managedWindows);
+            await context.saveCurrentState(screenIndex, null, null, 0, context.autoRefreshTimers, context.managedWindows);
         }
         sendCommandFeedback(command, 'success', `Pantalla ${screenIndex} cerrada`);
     } catch (error) {
@@ -321,7 +327,7 @@ function handleCloseScreen(command) {
 function handleIdentifyScreen(command) {
     const { screenIndex, identifierText } = command;
     const targetDisplay = context.hardwareIdToDisplayMap.get(screenIndex);
-    
+
     if (!targetDisplay) return;
 
     log.info(`[IDENTIFY]: Identificando Pantalla ${screenIndex}`);
@@ -337,12 +343,12 @@ function handleIdentifyScreen(command) {
     const identifyWin = new BrowserWindow({
         x: targetDisplay.bounds.x, y: targetDisplay.bounds.y,
         width: targetDisplay.bounds.width, height: targetDisplay.bounds.height,
-        frame: false, 
-        transparent: true, 
-        alwaysOnTop: true, 
+        frame: false,
+        transparent: true,
+        alwaysOnTop: true,
         skipTaskbar: true,
         resizable: false,
-        webPreferences: { 
+        webPreferences: {
             preload: path.join(__dirname, '../identify-preload.js'),
             nodeIntegration: false,
             contextIsolation: true
@@ -352,7 +358,7 @@ function handleIdentifyScreen(command) {
     identifyWin.setMenu(null);
     identifyWin.setIgnoreMouseEvents(true); // Click-through
     identifyWin.loadFile(path.join(__dirname, '../identify.html'));
-    
+
     identifyWin.webContents.on('did-finish-load', () => {
         identifyWin.webContents.send('set-identifier', identifierText);
     });
@@ -371,13 +377,14 @@ function handleIdentifyScreen(command) {
  * Force a reload of a screen's content based on its last state.
  * Used for network recovery.
  */
-function handleRecoverScreen(screenId) {
-    const lastState = require('../services/state').loadLastState();
+async function handleRecoverScreen(screenId) {
+    const { loadLastState } = require('../services/state');
+    const lastState = await loadLastState();
     const stateData = lastState[String(screenId)];
 
     if (stateData && stateData.url) {
         log.info(`[RESILIENCE]: Recuperando Pantalla ${screenId} (${stateData.contentName || stateData.url})`);
-        
+
         handleShowUrl({
             action: 'show_url',
             screenIndex: String(screenId),
@@ -390,12 +397,12 @@ function handleRecoverScreen(screenId) {
     }
 }
 
-module.exports = { 
-    initializeHandlers, 
-    handleShowUrl, 
-    handleCloseScreen, 
-    handleIdentifyScreen, 
-    handleRecoverScreen, 
+module.exports = {
+    initializeHandlers,
+    handleShowUrl,
+    handleCloseScreen,
+    handleIdentifyScreen,
+    handleRecoverScreen,
     sendCommandFeedback,
     createContentWindow
 }

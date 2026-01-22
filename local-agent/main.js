@@ -1,6 +1,6 @@
 const { app, BrowserWindow, screen, ipcMain, shell, session } = require('electron');
 const path = require('path');
-const fs = require('fs');
+const fs = require('fs').promises;
 
 const { log } = require('./utils/logConfig');
 const NetworkMonitor = require('./services/network');
@@ -101,9 +101,9 @@ ipcMain.handle('get-gpu-status', (event, options) => getGpuStatus(options));
 /**
  * IPC HANDLERS - Display & Content Management
  */
-ipcMain.handle('get-screens', () => {
+ipcMain.handle('get-screens', async () => {
     const screens = [];
-    const lastState = loadLastState();
+    const lastState = await loadLastState();
     for (const [screenId, display] of hardwareIdToDisplayMap.entries()) {
         const idKey = String(screenId);
         const stateData = lastState[idKey] || {};
@@ -161,52 +161,77 @@ ipcMain.handle('browse-local-content', async () => {
     return { fileName, localUrl: `local:${fileName}` };
 });
 
-ipcMain.handle('get-presets', () => {
+ipcMain.handle('get-presets', async () => {
     try {
         const presetsPath = path.join(__dirname, 'config', 'presets.json');
-        if (fs.existsSync(presetsPath)) return JSON.parse(fs.readFileSync(presetsPath, 'utf8'));
+        try {
+            await fs.access(presetsPath);
+            const data = await fs.readFile(presetsPath, 'utf8');
+            return JSON.parse(data);
+        } catch {
+            return [];
+        }
     } catch (e) { log.error('Error presets:', e); }
     return [];
 });
 
-ipcMain.handle('get-credential', (event, key) => {
+ipcMain.handle('get-credential', async (event, key) => {
     try {
-        if (fs.existsSync(CREDENTIALS_FILE_PATH)) {
-            const data = JSON.parse(fs.readFileSync(CREDENTIALS_FILE_PATH, 'utf8'));
-            return data[key] || null;
+        try {
+            await fs.access(CREDENTIALS_FILE_PATH);
+            const data = await fs.readFile(CREDENTIALS_FILE_PATH, 'utf8');
+            const creds = JSON.parse(data);
+            return creds[key] || null;
+        } catch {
+            return null;
         }
     } catch (e) { log.error('Error creds:', e); }
     return null;
 });
 
-ipcMain.handle('save-credential', (event, key, value) => {
+ipcMain.handle('save-credential', async (event, key, value) => {
     try {
         let data = {};
-        if (fs.existsSync(CREDENTIALS_FILE_PATH)) {
-            data = JSON.parse(fs.readFileSync(CREDENTIALS_FILE_PATH, 'utf8'));
-        }
+        try {
+            await fs.access(CREDENTIALS_FILE_PATH);
+            const content = await fs.readFile(CREDENTIALS_FILE_PATH, 'utf8');
+            data = JSON.parse(content);
+        } catch (e) { /* ignore if not exists/corrupt */ }
+
         data[key] = value;
         const dir = path.dirname(CREDENTIALS_FILE_PATH);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(CREDENTIALS_FILE_PATH, JSON.stringify(data, null, 2));
+        try {
+            await fs.access(dir);
+        } catch {
+            await fs.mkdir(dir, { recursive: true });
+        }
+        await fs.writeFile(CREDENTIALS_FILE_PATH, JSON.stringify(data, null, 2));
         return true;
     } catch (e) { log.error('Error saving creds:', e); return false; }
 });
 
-ipcMain.handle('get-settings', () => {
+ipcMain.handle('get-settings', async () => {
     try {
-        if (fs.existsSync(SETTINGS_FILE_PATH)) {
-            return JSON.parse(fs.readFileSync(SETTINGS_FILE_PATH, 'utf8'));
+        try {
+            await fs.access(SETTINGS_FILE_PATH);
+            const data = await fs.readFile(SETTINGS_FILE_PATH, 'utf8');
+            return JSON.parse(data);
+        } catch {
+            return {};
         }
     } catch (e) { log.error('Error settings:', e); }
     return {};
 });
 
-ipcMain.handle('save-settings', (event, settings) => {
+ipcMain.handle('save-settings', async (event, settings) => {
     try {
         const dir = path.dirname(SETTINGS_FILE_PATH);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(SETTINGS_FILE_PATH, JSON.stringify(settings, null, 2));
+        try {
+            await fs.access(dir);
+        } catch {
+            await fs.mkdir(dir, { recursive: true });
+        }
+        await fs.writeFile(SETTINGS_FILE_PATH, JSON.stringify(settings, null, 2));
         return true;
     } catch (e) {
         log.error('Error saving settings:', e);
@@ -259,7 +284,7 @@ app.whenReady().then(async () => {
         log.info('[MEMORY]: Cache HTTP de inicio limpiada.');
     }).catch(() => { });
     networkMonitor.start(5000);
-    restoreLastState(hardwareIdToDisplayMap, handleShowUrl);
+    await restoreLastState(hardwareIdToDisplayMap, handleShowUrl);
 
     screen.on('display-added', onScreenChange);
     screen.on('display-removed', onScreenChange);
