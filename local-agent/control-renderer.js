@@ -357,15 +357,26 @@ async function updateGpuStatus(force = false) {
         // Pasamos { force: true } si el usuario hizo clic
         const status = await window.electron.getGpuStatus({ force: force });
 
+        // Mostrar solo el nombre de la GPU (sin tipo de conexión para evitar overflow)
         document.getElementById('gpu-name').innerHTML = `GPU: <span id="gpu-info">${status.gpuName}</span>`;
         const b = document.getElementById('gpu-badge');
 
         if (status.isOptimal) {
             b.className = 'gpu-badge optimal';
             document.getElementById('gpu-icon').textContent = 'check_circle';
+            b.title = `✅ Configuración GPU óptima\n\nTipo: ${status.connectionType}`;
         } else {
             b.className = 'gpu-badge warning';
             document.getElementById('gpu-icon').textContent = 'warning';
+
+            // Usar el mensaje de warning si existe, sino mensaje genérico
+            if (status.warningMessage) {
+                b.title = status.warningMessage;
+            } else if (status.dedicatedGpuName) {
+                b.title = `⚠️ Monitor en GPU Integrada\n\nGPU dedicada disponible: ${status.dedicatedGpuName}\n\nConecta el monitor a la GPU dedicada para mejor rendimiento.`;
+            } else {
+                b.title = 'GPU integrada detectada - Verifica la conexión del monitor';
+            }
         }
     } catch (err) {
         console.error("GPU Check failed", err);
