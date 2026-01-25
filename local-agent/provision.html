@@ -172,15 +172,92 @@
         </div>
     </div>
 
-    <div class="container">
-        <h1>Asistente de Vinculación</h1>
-        <p>Inicia sesión en el panel de control y vincula este dispositivo</p>
-        <div id="deviceId">Cargando ID...</div>
+    <div class="container" id="config-container">
+        <h1>Vinculación</h1>
+
+        <div style="margin-bottom: 20px;">
+            <input type="text" id="serverUrl" placeholder="Server..." style="
+                width: 100%;
+                background-color: var(--color-bg-input);
+                padding: 12px;
+                border-radius: var(--border-radius-lg);
+                font-size: 14px;
+                color: var(--color-text-primary);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                margin-bottom: 15px;
+                outline: none;
+            ">
+            <button id="connectBtn" style="
+                width: 100%;
+                background-color: var(--color-primary);
+                color: white;
+                border: none;
+                padding: 12px;
+                border-radius: var(--border-radius-lg);
+                font-weight: 600;
+                cursor: pointer;
+                transition: opacity 0.2s;
+            ">Conectar</button>
+        </div>
+
+        <div id="statusMessage" style="color: var(--color-text-secondary); font-size: 13px; min-height: 20px;"></div>
+
+        <div id="id-section"
+            style="display: none; margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 20px;">
+            <p style="font-size: 13px; margin-bottom: 8px;">ID de Máquina:</p>
+            <div id="deviceId">Cargando ID...</div>
+        </div>
     </div>
     <script>
         const deviceIdElement = document.getElementById('deviceId');
+        const serverUrlInput = document.getElementById('serverUrl');
+        const connectBtn = document.getElementById('connectBtn');
+        const statusMessage = document.getElementById('statusMessage');
+        const idSection = document.getElementById('id-section');
+
+        // Escuchar ID del dispositivo
         window.electron.onDeviceId((deviceId) => {
             deviceIdElement.innerText = deviceId;
+        });
+
+        // Escuchar estado de vinculación
+        window.electron.on('provision-status', ({ type, message }) => {
+            statusMessage.innerText = message;
+            statusMessage.style.color = type === 'error' ? '#ef4444' : (type === 'success' ? '#10b981' : 'var(--color-text-secondary)');
+
+            if (type === 'success') {
+                idSection.style.display = 'block';
+                serverUrlInput.parentElement.style.display = 'none';
+            } else {
+                connectBtn.disabled = false;
+                serverUrlInput.disabled = false;
+                connectBtn.style.opacity = '1';
+            }
+        });
+
+        connectBtn.addEventListener('click', () => {
+            const url = serverUrlInput.value.trim();
+            if (!url) {
+                statusMessage.innerText = 'Por favor, introduce una URL válida';
+                statusMessage.style.color = '#ef4444';
+                return;
+            }
+
+            try {
+                new URL(url); // Validación básica
+            } catch (e) {
+                statusMessage.innerText = 'URL mal formateada (ej: https://servidor.com)';
+                statusMessage.style.color = '#ef4444';
+                return;
+            }
+
+            statusMessage.innerText = 'Conectando con el servidor...';
+            statusMessage.style.color = 'var(--color-text-secondary)';
+            connectBtn.disabled = true;
+            serverUrlInput.disabled = true;
+            connectBtn.style.opacity = '0.5';
+
+            window.electron.send('set-server-url', url);
         });
 
         document.querySelector('.titlebar-button.minimize')?.addEventListener('click', () => {

@@ -10,27 +10,19 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 
-let SERVER_URL = process.env.SERVER_URL;
+const { loadConfig } = require('../utils/configManager');
+
+// SERVER_URL se carga dinámicamente desde el store si existe
+const config = loadConfig();
+let SERVER_URL = config.serverUrl || process.env.SERVER_URL;
 
 if (!SERVER_URL) {
     try {
         const packageJson = require('../package.json');
         SERVER_URL = packageJson.config?.serverUrl;
     } catch (e) {
-
+        // Ignorar error de carga
     }
-}
-
-if (!SERVER_URL) {
-    console.error('='.repeat(60));
-    console.error('ERROR: SERVER_URL no está configurado.');
-    console.error('');
-    console.error('Para desarrollo: Copia .env.example a .env y configura SERVER_URL');
-    console.error('Para producción: Configura SERVER_URL en GitHub Secrets');
-    console.error('');
-    console.error('Para producción:');
-    console.error('  Asegúrate que SERVER_URL esté en GitHub Secrets');
-    console.error('='.repeat(60));
 }
 
 
@@ -67,8 +59,15 @@ try {
 }
 
 
+// Helper para obtener la URL del servidor actualizada
+function getServerUrl() {
+    const freshConfig = loadConfig();
+    return freshConfig.serverUrl || SERVER_URL;
+}
+
 module.exports = {
     SERVER_URL,
+    getServerUrl,
     CONFIG_DIR,
     CONFIG_FILE_PATH,
     STATE_FILE_PATH,

@@ -14,17 +14,17 @@ jobs:
       contents: write
 
     steps:
-      # Descarga código del repositorio al tag
+      # Código del repositorio al tag
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Configura entorno de Node
+      # Entorno de Node
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      # Cachea dependencias npm
+      # Cachea dependencias
       - name: Cache npm dependencies
         uses: actions/cache@v4
         with:
@@ -33,12 +33,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-
 
-      # Instala dependencias del agente
+      # Instala dependencias
       - name: Install dependencies
         run: npm install
         working-directory: ./local-agent
 
-      # Compila aplicación y crea el .exe
+      # Compila
       - name: Build application
         run: npm run build:prod
         working-directory: ./local-agent

@@ -13,8 +13,11 @@ const { saveConfig } = require('../utils/configManager');
 const { getMachineId } = require('../services/device');
 
 // Inicia proceso de vinculación
-function startProvisioningMode(context) {
+function startProvisioningMode() {
     const deviceId = getMachineId();
+    let pendingServerUrl = '';
+    let socket = null;
+
     log.info(`[PROVISIONING]: ID de Maquina: ${deviceId}`);
 
     const provisionWindow = new BrowserWindow({
@@ -30,92 +33,95 @@ function startProvisioningMode(context) {
             backgroundThrottling: true,
             devTools: false
         },
-        title: "Vinculación de CUOTAS",
+        title: "Vinculación - ScreensWeb",
         backgroundColor: '#0a0a0a',
         frame: false,
         resizable: false
     });
+
     provisionWindow.setMenu(null);
 
-    // Manejadores para controles de ventana personalizados
+    // Escuchar URL desde la ventana
+    ipcMain.on('set-server-url', (event, url) => {
+        if (socket) {
+            socket.disconnect();
+            socket.removeAllListeners();
+        }
+
+        pendingServerUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+        log.info(`[PROVISIONING]: Intentando conectar a: ${pendingServerUrl}`);
+
+        socket = io(pendingServerUrl, {
+            reconnection: true,
+            reconnectionAttempts: 3,
+            timeout: 10000
+        });
+
+        socket.on('connect', () => {
+            log.info('[PROVISIONING]: Conexión exitosa. Registrando para vinculación...');
+            socket.emit('register-for-provisioning', deviceId);
+            provisionWindow.webContents.send('provision-status', {
+                type: 'success',
+                message: 'Conectado. Esperando vinculación desde el panel de control...'
+            });
+        });
+
+        socket.on('connect_error', (error) => {
+            log.error(`[PROVISIONING]: Error de conexión a ${pendingServerUrl}: ${error.message}`);
+            provisionWindow.webContents.send('provision-status', {
+                type: 'error',
+                message: 'No se pudo conectar al servidor. Verifica la URL e intenta de nuevo.'
+            });
+        });
+
+        socket.on('provision-success', async () => {
+            log.info('[PROVISIONING]: Vinculación exitosa detectada. Solicitando token...');
+
+            try {
+                const response = await fetch(`${pendingServerUrl}/api/auth/agent-token`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ deviceId })
+                });
+
+                if (!response.ok) throw new Error('Error al obtener el token del servidor');
+
+                const { token } = await response.json();
+
+                // Guardamos todo, incluyendo la URL que funcionó
+                saveConfig({
+                    deviceId,
+                    provisioned: true,
+                    agentToken: token,
+                    serverUrl: pendingServerUrl
+                });
+
+                log.info('[PROVISIONING]: Configuración guardada. Reiniciando...');
+
+                socket.disconnect();
+                app.relaunch();
+                app.exit(0);
+            } catch (err) {
+                log.error('[PROVISIONING]: Fallo al finalizar la vinculación:', err.message);
+                provisionWindow.webContents.send('provision-status', {
+                    type: 'error',
+                    message: `Error al finalizar: ${err.message}`
+                });
+            }
+        });
+    });
+
+    // Manejadores básicos
     ipcMain.on('window-control', (event, action) => {
         if (!provisionWindow || provisionWindow.isDestroyed()) return;
-
-        if (action === 'minimize') {
-            provisionWindow.minimize();
-        } else if (action === 'close') {
-            provisionWindow.close();
-        }
+        if (action === 'minimize') provisionWindow.minimize();
+        if (action === 'close') provisionWindow.close();
     });
 
     provisionWindow.loadFile(path.join(__dirname, '../provision.html'));
+
     provisionWindow.webContents.on('did-finish-load', () => {
         provisionWindow.webContents.send('device-id', deviceId);
-    });
-
-    // Configurar socket con reconexión automática
-    const socket = io(SERVER_URL, {
-        reconnection: true,
-        reconnectionAttempts: Infinity,
-        reconnectionDelay: 2000,
-        reconnectionDelayMax: 10000,
-        randomizationFactor: 0.5,
-        timeout: 10000
-    });
-
-    socket.on('connect', () => {
-        log.info('[PROVISIONING]: Conectado al servidor. Esperando vinculacion...');
-        socket.emit('register-for-provisioning', deviceId);
-    });
-
-    socket.on('reconnect', (attemptNumber) => {
-        log.info(`[PROVISIONING]: Reconectado despues de ${attemptNumber} intentos. Re-registrando para vinculacion...`);
-        socket.emit('register-for-provisioning', deviceId);
-    });
-
-    socket.on('disconnect', (reason) => {
-        log.warn(`[PROVISIONING]: Desconectado del servidor. Razon: ${reason}`);
-    });
-
-    socket.on('connect_error', (error) => {
-        log.error(`[PROVISIONING]: Error de conexion: ${error.message}`);
-    });
-
-    socket.on('provision-success', async () => {
-        log.info('[PROVISIONING]: Pin de vinculacion del servidor recibido. Obteniendo token de agente...');
-
-        try {
-            const response = await fetch(`${SERVER_URL}/api/auth/agent-token`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ deviceId })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(`El servidor denego la emision del token: ${response.status} - ${errorData.msg || 'Error desconocido'}`);
-            }
-
-            const tokenData = await response.json();
-            const agentToken = tokenData.token;
-
-            saveConfig({ deviceId, provisioned: true, agentToken });
-            log.info('[PROVISIONING]: Configuracion guardada. Reiniciando la aplicacion en modo normal...');
-
-            if (provisionWindow && !provisionWindow.isDestroyed()) {
-                provisionWindow.close();
-            }
-
-            socket.disconnect();
-            app.relaunch();
-            app.quit();
-
-        } catch (e) {
-            log.error('[PROVISIONING]: Error critico durante la provision:', e.message);
-            if (provisionWindow && !provisionWindow.isDestroyed()) {
-                provisionWindow.webContents.send('provision-error', e.message);
-            }
-        }
     });
 
     return provisionWindow;

@@ -26,6 +26,7 @@ try {
 try {
     const {
         SERVER_URL,
+        getServerUrl,
         CONFIG_DIR,
         CONFIG_FILE_PATH,
         STATE_FILE_PATH,
@@ -99,7 +100,7 @@ try {
                 app.quit();
                 break;
             case 'open-control':
-                openControlWindow(SERVER_URL, AGENT_VERSION);
+                openControlWindow(getServerUrl(), AGENT_VERSION);
                 break;
         }
     });
@@ -535,7 +536,7 @@ try {
     const initialConfig = loadConfig();
     app.whenReady().then(() => {
 
-        createTray(SERVER_URL, AGENT_VERSION);
+        createTray(getServerUrl(), AGENT_VERSION);
 
         if (!initialConfig.deviceId) {
             log.info('[INIT]: No se encontro configuracion. Iniciando modo vinculacion.');

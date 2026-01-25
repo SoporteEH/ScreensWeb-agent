@@ -15,5 +15,9 @@ contextBridge.exposeInMainWorld('electron', {
 
     // Controles de ventana
     minimizeWindow: () => ipcRenderer.send('window-control', 'minimize'),
-    closeWindow: () => ipcRenderer.send('window-control', 'close')
+    closeWindow: () => ipcRenderer.send('window-control', 'close'),
+
+    // Comunicación genérica
+    send: (channel, data) => ipcRenderer.send(channel, data),
+    on: (channel, func) => ipcRenderer.on(channel, (event, ...args) => func(...args))
 });
