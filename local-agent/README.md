@@ -275,6 +275,31 @@ local-agent/
 | **config/** | Centralized constants and configuration |
 | **utils/** | Reusable utilities |
 
+## Troubleshooting
+
+**Check logs:** `%APPDATA%/local-agent/ScreensWeb/logs/main.log`
+
+**Common causes:**
+- Another instance already running (single-instance lock)
+- Corrupted config file → Delete `%APPDATA%/local-agent/ScreensWeb/config.json`
+- Missing dependencies → Reinstall agent
+
+**Wrong screen count:**
+- Restart agent after connecting monitors
+- Ensure "Extend these displays" mode in Windows
+
+### Reset Agent
+
+**Full reset (returns to provisioning mode):**
+```cmd
+rmdir /s "%APPDATA%\\local-agent\\ScreensWeb"
+```
+
+**Clear only state (keeps config):**
+```cmd
+del "%APPDATA%\\local-agent\\ScreensWeb\\state.json"
+```
+
 ## License
 
-##### Proprietary - All rights reserved
+##### Proprietary - ****
