@@ -5,6 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { Readable } = require('stream');
 
 const { log } = require('../utils/logConfig');
 const { SYNC_API_URL, CONTENT_DIR, SERVER_URL } = require('../config/constants');
@@ -12,14 +13,12 @@ const { SYNC_API_URL, CONTENT_DIR, SERVER_URL } = require('../config/constants')
 /**
  * Sincroniza activos locales con el servidor.
  * @param {string} agentToken - Token para autenticación
- * @param {boolean} isSyncing - Variable para evitar colisiones (se maneja fuera o se pasa ref)
- * @returns {Promise<boolean>} Nuevo estado de isSyncing
+ * @returns {Promise<boolean>} Éxito de la sincronización
  */
 async function syncLocalAssets(agentToken) {
     log.info('[SYNC]: Iniciando proceso de sincronizacion de activos locales...');
 
     try {
-        log.info('[SYNC-DEBUG]: Pidiendo lista de activos desde el servidor...');
         const response = await fetch(SYNC_API_URL, {
             headers: { 'Authorization': `Bearer ${agentToken}` }
         });
@@ -27,7 +26,6 @@ async function syncLocalAssets(agentToken) {
             throw new Error(`Error del servidor al obtener la lista de activos: ${response.status}`);
         }
         const serverAssets = await response.json();
-        log.info(`[SYNC - DEBUG]: El servidor dice que debo tener ${serverAssets.length} archivos.`);
 
         const serverAssetMap = new Map(serverAssets.map(asset => [asset.serverFilename, asset]));
 
@@ -35,9 +33,8 @@ async function syncLocalAssets(agentToken) {
             fs.mkdirSync(CONTENT_DIR, { recursive: true });
         }
         const localFiles = fs.readdirSync(CONTENT_DIR);
-        log.info(`[SYNC - DEBUG]: Encontrados ${localFiles.length} archivos locales en disco.`);
 
-
+        // Elimina archivos obsoletos
         const filesToDelete = localFiles.filter(file => !serverAssetMap.has(file));
         for (const fileToDelete of filesToDelete) {
             try {
@@ -48,7 +45,7 @@ async function syncLocalAssets(agentToken) {
             }
         }
 
-
+        // Descarga nuevos archivos
         const filesToDownload = serverAssets.filter(asset => !localFiles.includes(asset.serverFilename));
         for (const assetToDownload of filesToDownload) {
             log.info(`[SYNC]: Descargando nuevo activo: ${assetToDownload.originalFilename}...`);

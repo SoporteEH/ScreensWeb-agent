@@ -136,6 +136,9 @@ function saveCurrentState(screenIndex, url, credentials, refreshInterval, autoRe
     }
 }
 
+const { net } = require('electron');
+const path = require('path');
+
 /**
  * Restaura las URLs guardadas.
  */
@@ -172,11 +175,74 @@ function restoreLastState(hardwareIdToDisplayMap, handleShowUrlCallback) {
     log.info(`[STATE]: Restauracion completada. ${restoredCount} pantallas restauradas.`);
 }
 
+/**
+ * Restaura TODO el contenido inmediatamente sin depender del servidor.
+ * Se ejecuta al inicio para garantizar que las pantallas muestren contenido
+ * aunque el servidor no esté disponible.
+ */
+function restoreAllContentImmediately(hardwareIdToDisplayMap, managedWindows, handleShowUrl, createContentWindow) {
+    const lastState = loadLastState();
+    if (Object.keys(lastState).length === 0) {
+        log.info('[STARTUP]: No hay estado previo para restaurar.');
+        return;
+    }
+
+    const hasInternet = net.isOnline();
+    log.info(`[STARTUP]: Restaurando contenido (Internet: ${hasInternet ? 'SI' : 'NO'})...`);
+
+    const fallbackPath = `file://${path.join(__dirname, '../fallback.html')}`;
+    let restoredCount = 0;
+
+    for (const [stableId, screenData] of Object.entries(lastState)) {
+        if (screenData.url && hardwareIdToDisplayMap.has(stableId)) {
+            const isLocalContent = screenData.url.startsWith('local:');
+            const targetDisplay = hardwareIdToDisplayMap.get(stableId);
+
+            if (!hasInternet && !isLocalContent) {
+                // Sin internet y contenido remoto: crear ventana directamente con fallback
+                log.info(`[STARTUP]: Sin internet - creando ventana fallback en pantalla ${stableId}`);
+
+                setTimeout(() => {
+                    const existingWin = managedWindows.get(stableId);
+                    if (existingWin && !existingWin.isDestroyed()) {
+                        existingWin.close();
+                    }
+
+                    const command = {
+                        action: 'show_url',
+                        screenIndex: stableId,
+                        url: screenData.url,
+                        credentials: screenData.credentials || null,
+                        refreshInterval: screenData.refreshInterval || 0
+                    };
+
+                    createContentWindow(targetDisplay, fallbackPath, command);
+                }, 500 * restoredCount);
+            } else {
+                log.info(`[STARTUP]: Restaurando pantalla ${stableId}: ${screenData.url}`);
+
+                setTimeout(() => {
+                    handleShowUrl({
+                        action: 'show_url',
+                        screenIndex: stableId,
+                        url: screenData.url,
+                        credentials: screenData.credentials || null,
+                        refreshInterval: screenData.refreshInterval || 0
+                    });
+                }, 500 * restoredCount);
+            }
+            restoredCount++;
+        }
+    }
+    log.info(`[STARTUP]: ${restoredCount} pantallas procesadas.`);
+}
+
 module.exports = {
     buildDisplayMap,
     loadLastState,
     cleanOrphanedState,
     setupAutoRefresh,
     saveCurrentState,
-    restoreLastState
+    restoreLastState,
+    restoreAllContentImmediately
 };
