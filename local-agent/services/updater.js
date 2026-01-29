@@ -135,21 +135,21 @@ async function checkForUpdates() {
     // Si la app está rota, intentará cada 10 min.
     setInterval(() => {
         if (!isCheckingForUpdate) {
-            log.info('[UPDATER]: Re-intento periódico de búsqueda de actualización...');
+            log.info('[UPDATER]: Re-intento periodico de busqueda de actualizacion...');
             autoUpdater.checkForUpdates().catch(() => { });
         }
     }, 10 * 60 * 1000);
 }
 
 /**
- * Verifica si hay una actualización en curso
+ * Verifica si hay una actualizacion en curso
  */
 function isUpdating() {
     return isCheckingForUpdate;
 }
 
 /**
- * Marca buscando una actualización
+ * Marca buscando una actualizacion
  */
 function setUpdating(value) {
     isCheckingForUpdate = value;
