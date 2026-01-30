@@ -46,7 +46,7 @@ function createTray(serverUrl, version) {
             {
                 label: 'Salir',
                 click: () => {
-                    log.info('[TRAY]: Saliendo de la aplicación...');
+                    log.info('[TRAY]: Saliendo de la aplicacion...');
                     app.isQuitting = true;
                     app.quit();
                 }

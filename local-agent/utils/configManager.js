@@ -17,7 +17,7 @@ function loadConfig() {
     try {
         return store.store;
     } catch (error) {
-        log.error('[CONFIG]: Error al leer configuración:', error);
+        log.error('[CONFIG]: Error al leer configuracion:', error);
         return {};
     }
 }
@@ -27,7 +27,7 @@ function saveConfig(config) {
     try {
         store.set(config);
     } catch (error) {
-        log.error('[CONFIG]: Error al guardar configuración:', error);
+        log.error('[CONFIG]: Error al guardar configuracion:', error);
     }
 }
 
@@ -35,9 +35,9 @@ function saveConfig(config) {
 function deleteConfig() {
     try {
         store.clear();
-        log.info('[CONFIG]: Configuración eliminada del store.');
+        log.info('[CONFIG]: Configuracion eliminada del store.');
     } catch (error) {
-        log.error('[CONFIG]: Error al limpiar configuración:', error);
+        log.error('[CONFIG]: Error al limpiar configuracion:', error);
     }
 }
 

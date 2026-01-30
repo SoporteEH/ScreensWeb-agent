@@ -79,7 +79,7 @@ function configureMemory() {
     app.commandLine.appendSwitch('disable-notifications');
     app.commandLine.appendSwitch('disable-domain-reliability');
 
-    log.info('[MEMORY]: Configuración de optimización de memoria aplicada');
+    log.info('[MEMORY]: ización de memoria aplicada');
 }
 
 
