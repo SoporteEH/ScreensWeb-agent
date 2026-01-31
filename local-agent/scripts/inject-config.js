@@ -25,5 +25,5 @@ packageJson.config.serverUrl = SERVER_URL;
 
 fs.writeFileSync(packagePath, JSON.stringify(packageJson, null, 2) + '\n');
 
-console.log(`✓ SERVER_URL inyectado: ${SERVER_URL}`);
-console.log(`✓ package.json actualizado`);
+console.log(`SERVER_URL inyectado: ${SERVER_URL}`);
+console.log(`package.json actualizado`);
