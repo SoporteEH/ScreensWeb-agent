@@ -506,6 +506,7 @@
                 <div class="logo">
                     <span class="material-icons">grid_view</span>
                 </div>
+                <div id="device-name" class="title">PC CUOTAS</div>
                 <span class="version-badge" id="agent-version"></span>
             </div>
 
@@ -639,6 +640,10 @@
             } else {
                 statusBadge.classList.add('offline');
                 statusText.textContent = info.status;
+            }
+
+            if (info.deviceName) {
+                document.getElementById('device-name').textContent = info.deviceName;
             }
         });
 

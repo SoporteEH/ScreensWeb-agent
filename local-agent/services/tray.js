@@ -9,6 +9,8 @@ const { log } = require('../utils/logConfig');
 let tray = null;
 let controlWindow = null;
 
+const { getDeviceName } = require('./identity');
+
 // Inicializa icono de bandeja
 function createTray(serverUrl, version) {
     if (tray) return tray;
@@ -75,6 +77,8 @@ function openControlWindow(serverUrl, version) {
         return;
     }
 
+    const deviceName = getDeviceName();
+
     controlWindow = new BrowserWindow({
         width: 420,
         height: 600,
@@ -98,7 +102,8 @@ function openControlWindow(serverUrl, version) {
         controlWindow.webContents.send('agent-info', {
             serverUrl: serverUrl || 'Desconocido',
             version: version || '1.0.0',
-            status: 'Online'
+            status: 'Online',
+            deviceName: deviceName
         });
     });
 

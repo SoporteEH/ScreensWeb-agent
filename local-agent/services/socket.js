@@ -56,6 +56,10 @@ function connectToSocketServer(token, handlers) {
         if (handlers.onCommand) handlers.onCommand(command);
     });
 
+    socket.on('device-info', (device) => {
+        if (handlers.onDeviceInfo) handlers.onDeviceInfo(device);
+    });
+
     socket.on('assets-updated', () => {
         if (handlers.onAssetsUpdated) handlers.onAssetsUpdated();
     });

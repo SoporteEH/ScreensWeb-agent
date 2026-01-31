@@ -41,6 +41,7 @@ async function bootstrap() {
         const { configureGpu, configureMemory, registerGpuCrashHandlers } = require('./services/gpu');
         const { registerIpcHandlers } = require('./handlers/ipc');
         const { startNormalMode, startProvisioningMode } = require('./services/agentModes');
+        const { startProvisioningMode: startProvisioningHandler } = require('./handlers/provisioning');
         const { createTray } = require('./services/tray');
         const commandHandlers = require('./handlers/commands');
         const stateService = require('./services/state');
@@ -79,6 +80,7 @@ async function bootstrap() {
         context.CONSTANTS = constants.CONSTANTS;
         context.setDeviceId = (id) => { context.deviceId = id; };
         context.setAgentToken = (token) => { context.agentToken = token; };
+        context.startProvisioningHandler = startProvisioningHandler;
         context.registerDevice = () => deviceService.registerDevice(context.socket, context.deviceId, context.hardwareIdToDisplayMap);
         context.sendHeartbeat = () => socketService.sendHeartbeat(context.socket, Array.from(context.hardwareIdToDisplayMap.keys()));
         context.restoreAllContent = () => stateService.restoreAllContentImmediately(
@@ -116,6 +118,32 @@ async function bootstrap() {
                     if (actions[command.action]) actions[command.action](command);
                 },
                 onAssetsUpdated: () => assetsService.syncLocalAssets(context.agentToken),
+                onDeviceInfo: (device) => {
+                    log.info('[SOCKET]: Device info received:', device.name);
+                    const { setDeviceName, getDeviceName } = require('./services/identity');
+                    setDeviceName(device.name);
+
+                    // Notificar a la ventana de control si está abierta
+                    try {
+                        const { BrowserWindow } = require('electron');
+                        const wins = BrowserWindow.getAllWindows();
+                        wins.forEach(win => {
+                            if (win && !win.isDestroyed() && win.webContents) {
+                                // Buscamos la ventana enviando un ping o por URL
+                                const url = win.getURL();
+                                if (url.includes('control.html')) {
+                                    const constants = require('./config/constants');
+                                    win.webContents.send('agent-info', {
+                                        serverUrl: constants.getServerUrl(),
+                                        version: constants.AGENT_VERSION,
+                                        status: 'Online',
+                                        deviceName: device.name
+                                    });
+                                }
+                            }
+                        });
+                    } catch (e) { log.debug('Error refreshing control window:', e); }
+                },
                 onForceReprovision: () => {
                     log.warn('[SOCKET]: Force-reprovision received.');
                     // ... same logic as before to clean config and relaunch
